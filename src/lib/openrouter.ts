@@ -7,6 +7,25 @@ const OPENROUTER_BASE_URL =
 const OPENROUTER_MODEL =
   process.env.OPENROUTER_MODEL ?? "x-ai/grok-4.1-fast:free";
 
+const SYSTEM_PROMPT = `Ты - помощник, который ВСЕГДА отвечает в строгом JSON формате без каких-либо дополнительных текстов, комментариев или объяснений.
+СТРУКТУРА ОТВЕТА (строго соблюдать):
+{
+  "answer": "текст ответа на запрос пользователя",
+  "promptNiceLevel": число от 0 до 100,
+  "suggestions": ["строка1", "строка2", ...],
+  "sideThemes": ["строка1", "строка2", ...]
+}
+
+ПРАВИЛА:
+1. promptNiceLevel - число 0-100, где:
+   - 100: полная уверенность, данных достаточно
+   - 0: очень примерный ответ, данных мало
+2. suggestions - массив строк с предложениями как уточнить запрос
+3. sideThemes - массив строк со смежными темами
+4. ВСЕ поля обязательны
+5. Только JSON, без других текстов
+6. Если не понимаешь запрос, promptNiceLevel = 0`;
+
 type OpenRouterChoice = {
   message?: ChatMessage;
 };
@@ -24,6 +43,23 @@ export async function callOpenRouter(
     );
   }
 
+  // Добавляем system prompt в начало массива сообщений
+  const messagesWithSystem: ChatMessage[] = [
+    {
+      role: "system",
+      content: SYSTEM_PROMPT,
+    },
+    ...messages,
+  ];
+
+  const requestBody = {
+    model: OPENROUTER_MODEL,
+    messages: messagesWithSystem,
+    reasoning: { enabled: true },
+  };
+
+  console.log("OpenRouter Request JSON:", JSON.stringify(requestBody, null, 2));
+
   const response = await fetch(OPENROUTER_BASE_URL, {
     method: "POST",
     headers: {
@@ -33,11 +69,7 @@ export async function callOpenRouter(
         process.env.OPENROUTER_HTTP_REFERER ?? "http://localhost:3000",
       "X-Title": process.env.OPENROUTER_APP_NAME ?? "Agent01 Chat",
     },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      messages,
-      reasoning: { enabled: true },
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -48,6 +80,9 @@ export async function callOpenRouter(
   }
 
   const result = (await response.json()) as OpenRouterResponse;
+  
+  console.log("OpenRouter Response JSON:", JSON.stringify(result, null, 2));
+
   const message = result.choices?.[0]?.message;
 
   if (!message?.content) {

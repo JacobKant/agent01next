@@ -62,10 +62,16 @@ export default function ChatPage() {
         throw new Error(data.error ?? "Не удалось получить ответ модели");
       }
 
-      setMessages((prev) => [
-        ...prev,
-        { ...data.message, id: crypto.randomUUID() },
-      ]);
+      const assistantMessage: UiMessage = {
+        id: crypto.randomUUID(),
+        role: data.message.role,
+        content: data.message.content,
+        ...(data.message.reasoning_details && {
+          reasoning_details: data.message.reasoning_details,
+        }),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -96,16 +102,18 @@ export default function ChatPage() {
                 {message.role === "user" ? "Вы" : "AI"}
               </p>
               <p className="message-content">{message.content}</p>
-              {message.reasoning_details && (
-                <details className="message-reasoning">
-                  <summary>reasoning_details</summary>
-                  <pre>
-                    {JSON.stringify(message.reasoning_details, null, 2)}
-                  </pre>
-                </details>
-              )}
             </article>
           ))}
+          {isLoading && (
+            <article className="message message-assistant">
+              <p className="message-author">AI</p>
+              <div className="loading-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </article>
+          )}
         </div>
 
         <form className="chat-form" onSubmit={handleSubmit}>
@@ -114,6 +122,7 @@ export default function ChatPage() {
             placeholder="Спросите что-нибудь..."
             value={input}
             onChange={(event) => setInput(event.target.value)}
+            disabled={isLoading}
           />
           <button className="chat-button" type="submit" disabled={isLoading}>
             {isLoading ? "Отправка..." : "Отправить"}
