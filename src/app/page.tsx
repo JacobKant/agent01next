@@ -10,7 +10,7 @@ const initialMessages: UiMessage[] = [
     id: "welcome",
     role: "assistant",
     content:
-      "Привет! Я готов ответить на ваши вопросы. Опишите задачу и нажмите отправить.",
+      "Привет! Я составитель тостов на заказ. Помогу вам создать идеальный тост для любого события. Начнем?",
   },
 ];
 
@@ -88,7 +88,7 @@ export default function ChatPage() {
       <section className="chat-window">
         <header className="chat-header">
           <div>
-            <p className="chat-title">AI Chat</p>
+            <p className="chat-title">Составитель Тостов</p>
           </div>
         </header>
 
@@ -119,7 +119,7 @@ export default function ChatPage() {
         <form className="chat-form" onSubmit={handleSubmit}>
           <input
             className="chat-input"
-            placeholder="Спросите что-нибудь..."
+            placeholder="Введите ваш запрос..."
             value={input}
             onChange={(event) => setInput(event.target.value)}
             disabled={isLoading}
