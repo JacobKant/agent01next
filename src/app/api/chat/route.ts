@@ -4,6 +4,7 @@ import { ChatMessage } from "@/types/chat";
 
 type ChatRequestBody = {
   messages?: ChatMessage[];
+  temperature?: number;
 };
 
 export async function POST(request: NextRequest) {
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { messages } = body;
+  const { messages, temperature } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const assistantMessage = await callOpenRouter(messages);
+    const assistantMessage = await callOpenRouter(messages, temperature ?? 1.0);
     return NextResponse.json({ message: assistantMessage }, { status: 200 });
   } catch (error) {
     const message =

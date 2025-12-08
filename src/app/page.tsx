@@ -1,17 +1,11 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useRef, useEffect } from "react";
 import { ChatMessage } from "@/types/chat";
 
 type UiMessage = ChatMessage & { id: string };
 
 const initialMessages: UiMessage[] = [
-  {
-    id: "welcome",
-    role: "assistant",
-    content:
-      "Привет! Я составитель тостов на заказ. Помогу вам создать идеальный тост для любого события. Начнем?",
-  },
 ];
 
 const toPayload = (messages: UiMessage[]): ChatMessage[] =>
@@ -26,6 +20,18 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [temperature, setTemperature] = useState(1.0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Автоматическое изменение высоты textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      const scrollHeight = textarea.scrollHeight;
+      textarea.style.height = `${scrollHeight}px`;
+    }
+  }, [input]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -50,7 +56,10 @@ export default function ChatPage() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: toPayload(optimisticMessages) }),
+        body: JSON.stringify({ 
+          messages: toPayload(optimisticMessages),
+          temperature 
+        }),
       });
 
       const data = (await response.json()) as {
@@ -88,7 +97,7 @@ export default function ChatPage() {
       <section className="chat-window">
         <header className="chat-header">
           <div>
-            <p className="chat-title">Составитель Тостов</p>
+            <p className="chat-title">AI Chat</p>
           </div>
         </header>
 
@@ -117,18 +126,37 @@ export default function ChatPage() {
         </div>
 
         <form className="chat-form" onSubmit={handleSubmit}>
-          <input
+          <textarea
+            ref={textareaRef}
             className="chat-input"
             placeholder="Введите ваш запрос..."
             value={input}
             onChange={(event) => setInput(event.target.value)}
             disabled={isLoading}
+            rows={1}
           />
           <button className="chat-button" type="submit" disabled={isLoading}>
             {isLoading ? "Отправка..." : "Отправить"}
           </button>
         </form>
         {error && <p className="chat-error">{error}</p>}
+        
+        <div className="chat-settings">
+          <label htmlFor="temperature" className="temperature-label">
+            Temperature: {temperature}
+          </label>
+          <input
+            id="temperature"
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            value={temperature}
+            onChange={(event) => setTemperature(parseFloat(event.target.value))}
+            disabled={isLoading}
+            className="temperature-input"
+          />
+        </div>
       </section>
     </main>
   );
