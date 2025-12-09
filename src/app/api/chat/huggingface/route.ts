@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callOpenRouter, TokenUsage } from "@/lib/openrouter";
+import { callHuggingFace, TokenUsage } from "@/lib/huggingface";
 import { ChatMessage } from "@/types/chat";
 
 type ChatRequestBody = {
@@ -29,8 +29,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!model) {
+    return NextResponse.json(
+      { error: "Поле model обязательно" },
+      { status: 400 }
+    );
+  }
+
   try {
-    const result = await callOpenRouter(
+    const result = await callHuggingFace(
       messages,
       model,
       temperature ?? 1.0
@@ -41,7 +48,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Неизвестная ошибка OpenRouter";
+      error instanceof Error ? error.message : "Неизвестная ошибка HuggingFace";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

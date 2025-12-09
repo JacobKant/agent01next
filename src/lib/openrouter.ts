@@ -12,14 +12,28 @@ type OpenRouterChoice = {
   message?: ChatMessage;
 };
 
+type OpenRouterUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+};
+
 type OpenRouterResponse = {
   choices?: OpenRouterChoice[];
+  usage?: OpenRouterUsage;
+};
+
+export type TokenUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
 };
 
 export async function callOpenRouter(
   messages: ChatMessage[],
+  model: string = OPENROUTER_MODEL,
   temperature: number = 1.0
-): Promise<ChatMessage> {
+): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
   if (!OPENROUTER_API_KEY) {
     throw new Error(
       "OPENROUTER_API_KEY не найден. Добавьте ключ в .env.local и перезапустите dev-сервер."
@@ -36,7 +50,7 @@ export async function callOpenRouter(
   ];
 
   const requestBody = {
-    model: OPENROUTER_MODEL,
+    model,
     messages: messagesWithSystem,
     temperature,
     reasoning: { enabled: true },
@@ -73,6 +87,14 @@ export async function callOpenRouter(
     throw new Error("OpenRouter не вернул сообщение ассистента");
   }
 
-  return message;
+  const usage: TokenUsage | undefined = result.usage
+    ? {
+        prompt_tokens: result.usage.prompt_tokens ?? 0,
+        completion_tokens: result.usage.completion_tokens ?? 0,
+        total_tokens: result.usage.total_tokens ?? 0,
+      }
+    : undefined;
+
+  return { message, usage };
 }
 
