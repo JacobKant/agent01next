@@ -72,6 +72,16 @@ function calculateCost(
   return inputCost + outputCost;
 }
 
+// Функция для приблизительного подсчета токенов
+// Используется эвристика: ~1 токен = 4 символа (для английского текста)
+// Для русского текста может быть немного больше, но для приблизительной оценки подойдет
+function estimateTokens(text: string): number {
+  if (!text.trim()) return 0;
+  // Учитываем пробелы и знаки препинания
+  // Более точная оценка: делим на 3.5 для учета русского текста
+  return Math.ceil(text.length / 3.5);
+}
+
 const toPayload = (messages: UiMessage[]): ChatMessage[] =>
   messages.map(({ role, content, reasoning_details }) => ({
     role,
@@ -89,6 +99,8 @@ export default function ChatPage() {
   const [model, setModel] = useState<string>(
     provider === "openrouter" ? OPENROUTER_MODELS[0] : HUGGINGFACE_MODELS[0]
   );
+  const [maxTokens, setMaxTokens] = useState<string>("");
+  const [estimatedTokens, setEstimatedTokens] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Обновляем модель при смене провайдера
@@ -107,6 +119,23 @@ export default function ChatPage() {
       textarea.style.height = `${scrollHeight}px`;
     }
   }, [input]);
+
+  // Подсчет приблизительного количества токенов для текущего запроса
+  useEffect(() => {
+    if (!input.trim()) {
+      setEstimatedTokens(0);
+      return;
+    }
+
+    // Подсчитываем токены для всего запроса: история сообщений + текущий ввод
+    const allMessagesText = [
+      ...messages.map((m) => `${m.role}: ${m.content}`),
+      `user: ${input}`,
+    ].join("\n");
+
+    const tokens = estimateTokens(allMessagesText);
+    setEstimatedTokens(tokens);
+  }, [input, messages]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -136,6 +165,18 @@ export default function ChatPage() {
         temperature,
         model,
       };
+
+      // Добавляем параметр max_tokens только если поле заполнено
+      if (maxTokens.trim()) {
+        const maxTokensValue = parseInt(maxTokens.trim(), 10);
+        if (!isNaN(maxTokensValue) && maxTokensValue > 0) {
+          if (provider === "openrouter") {
+            requestBody.max_tokens = maxTokensValue;
+          } else {
+            requestBody.max_new_tokens = maxTokensValue;
+          }
+        }
+      }
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -291,15 +332,23 @@ export default function ChatPage() {
         </div>
 
         <form className="chat-form" onSubmit={handleSubmit}>
-          <textarea
-            ref={textareaRef}
-            className="chat-input"
-            placeholder="Введите ваш запрос..."
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            disabled={isLoading}
-            rows={1}
-          />
+          <div className="chat-input-wrapper">
+          {estimatedTokens > 0 && (
+              <div className="chat-tokens-info">
+                ~{estimatedTokens} токенов
+              </div>
+            )}
+            <textarea
+              ref={textareaRef}
+              className="chat-input"
+              placeholder="Введите ваш запрос..."
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              disabled={isLoading}
+              rows={1}
+            />
+            
+          </div>
           <button className="chat-button" type="submit" disabled={isLoading}>
             {isLoading ? "Отправка..." : "Отправить"}
           </button>
@@ -320,6 +369,19 @@ export default function ChatPage() {
             onChange={(event) => setTemperature(parseFloat(event.target.value))}
             disabled={isLoading}
             className="temperature-input"
+          />
+          <label htmlFor="max-tokens" className="max-tokens-label">
+            Max Tokens:
+          </label>
+          <input
+            id="max-tokens"
+            type="number"
+            min="1"
+            value={maxTokens}
+            onChange={(event) => setMaxTokens(event.target.value)}
+            disabled={isLoading}
+            className="max-tokens-input"
+            placeholder="Не ограничено"
           />
         </div>
       </section>

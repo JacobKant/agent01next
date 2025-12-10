@@ -6,6 +6,7 @@ type ChatRequestBody = {
   messages?: ChatMessage[];
   model?: string;
   temperature?: number;
+  max_tokens?: number;
 };
 
 export async function POST(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { messages, model, temperature } = body;
+  const { messages, model, temperature, max_tokens } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
@@ -33,7 +34,8 @@ export async function POST(request: NextRequest) {
     const result = await callOpenRouter(
       messages,
       model,
-      temperature ?? 1.0
+      temperature ?? 1.0,
+      max_tokens
     );
     return NextResponse.json(
       { message: result.message, usage: result.usage },

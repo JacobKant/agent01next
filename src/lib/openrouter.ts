@@ -1,9 +1,7 @@
 import { ChatMessage } from "@/types/chat";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_BASE_URL =
-  process.env.OPENROUTER_BASE_URL ??
-  "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL = "openai/gpt-oss-20b:free";
 
 const SYSTEM_PROMPT = `Ты универсальный AI помощник.`;
@@ -32,7 +30,8 @@ export type TokenUsage = {
 export async function callOpenRouter(
   messages: ChatMessage[],
   model: string = OPENROUTER_MODEL,
-  temperature: number = 1.0
+  temperature: number = 1.0,
+  max_tokens?: number
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
   if (!OPENROUTER_API_KEY) {
     throw new Error(
@@ -49,12 +48,16 @@ export async function callOpenRouter(
     ...messages,
   ];
 
-  const requestBody = {
+  const requestBody: any = {
     model,
     messages: messagesWithSystem,
     temperature,
     reasoning: { enabled: true },
   };
+
+  if (max_tokens !== undefined) {
+    requestBody.max_tokens = max_tokens;
+  }
 
   console.log("OpenRouter Request JSON:", JSON.stringify(requestBody, null, 2));
 

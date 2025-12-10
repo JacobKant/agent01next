@@ -155,8 +155,19 @@ body {
   gap: 0.75rem;
 }
 
-.chat-input {
+.chat-input-wrapper {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-tokens-info {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 4px;
+}
+
+.chat-input {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--bg-input);
@@ -326,6 +337,39 @@ body {
 }
 
 .temperature-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.max-tokens-label {
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: block;
+}
+
+.max-tokens-input {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.max-tokens-input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.max-tokens-input:focus {
+  outline: 2px solid rgba(56, 189, 248, 0.4);
+  border-color: var(--accent);
+}
+
+.max-tokens-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

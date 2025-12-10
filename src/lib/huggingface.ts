@@ -27,7 +27,8 @@ export type TokenUsage = {
 export async function callHuggingFace(
   messages: ChatMessage[],
   model: string,
-  temperature: number = 1.0
+  temperature: number = 1.0,
+  max_new_tokens?: number
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
   if (!HF_API_KEY) {
     throw new Error(
@@ -35,11 +36,15 @@ export async function callHuggingFace(
     );
   }
 
-  const requestBody = {
+  const requestBody: any = {
     model,
     messages,
     temperature,
   };
+
+  if (max_new_tokens !== undefined) {
+    requestBody.max_new_tokens = max_new_tokens;
+  }
 
   console.log("HuggingFace Request JSON:", JSON.stringify(requestBody, null, 2));
 
