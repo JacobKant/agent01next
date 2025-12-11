@@ -159,14 +159,14 @@ export default function ChatPage() {
     const startTime = performance.now();
 
     try {
-      const apiUrl = provider === "openrouter" ? "/api/chat" : "/api/chat/huggingface";
       const requestBody: any = {
         messages: toPayload(optimisticMessages),
         temperature,
         model,
+        provider,
       };
 
-      // Добавляем параметр max_tokens только если поле заполнено
+      // Добавляем параметр max_tokens/max_new_tokens только если поле заполнено
       if (maxTokens.trim()) {
         const maxTokensValue = parseInt(maxTokens.trim(), 10);
         if (!isNaN(maxTokensValue) && maxTokensValue > 0) {
@@ -178,7 +178,7 @@ export default function ChatPage() {
         }
       }
 
-      const response = await fetch(apiUrl, {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
@@ -188,6 +188,10 @@ export default function ChatPage() {
         message?: ChatMessage;
         usage?: TokenUsage;
         error?: string;
+        summarized?: {
+          message: ChatMessage;
+          originalCount: number;
+        };
       };
 
       if (!response.ok || !data.message) {
@@ -219,7 +223,25 @@ export default function ChatPage() {
         }),
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      // Если была выполнена суммаризация, заменяем историю на суммаризированное сообщение
+      if (data.summarized) {
+        const summarizedUiMessage: UiMessage = {
+          id: crypto.randomUUID(),
+          role: data.summarized.message.role,
+          content: `[История чата суммирована] ${data.summarized.message.content}`,
+          model: model,
+        };
+
+        // Заменяем все сообщения кроме последнего (текущий запрос пользователя) на суммаризированное,
+        // затем добавляем ответ ассистента
+        setMessages((prev) => {
+          const lastMessage = prev[prev.length - 1]; // Текущий запрос пользователя
+          return [summarizedUiMessage, lastMessage, assistantMessage];
+        });
+      } else {
+        // Если суммаризации не было, просто добавляем ответ ассистента
+        setMessages((prev) => [...prev, assistantMessage]);
+      }
     } catch (requestError) {
       setError(
         requestError instanceof Error
