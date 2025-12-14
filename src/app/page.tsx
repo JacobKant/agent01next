@@ -28,7 +28,7 @@ const initialMessages: UiMessage[] = [];
 
 const OPENROUTER_MODELS = [
   "mistralai/devstral-2512:free",
-  "openai/gpt-oss-120b:free",
+  "google/gemma-3-27b-it:free",
 ];
 
 const HUGGINGFACE_MODELS = [
@@ -43,7 +43,7 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
     inputPricePer1MTokens: 0.0,
     outputPricePer1MTokens: 0.0,
   },
-  "openai/gpt-oss-120b:free": {
+  "google/gemma-3-27b-it:free": {
     inputPricePer1MTokens: 0.0,
     outputPricePer1MTokens: 0.0,
   },
@@ -101,7 +101,165 @@ export default function ChatPage() {
   );
   const [maxTokens, setMaxTokens] = useState<string>("");
   const [estimatedTokens, setEstimatedTokens] = useState(0);
+  const [chatId, setChatId] = useState<string>("default");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [chats, setChats] = useState<Array<{ id: string; created_at: number; updated_at: number }>>([]);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Функция для сохранения сообщения в БД
+  const saveMessageToDb = async (message: UiMessage) => {
+    try {
+      await fetch("/api/chat/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId,
+          message: {
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            reasoning_details: message.reasoning_details,
+            response_time: message.responseTime,
+            usage: message.usage,
+            cost: message.cost,
+            model: message.model,
+          },
+        }),
+      });
+    } catch (error) {
+      console.error("Ошибка при сохранении сообщения:", error);
+    }
+  };
+
+  // Загрузка списка всех чатов
+  const loadChats = async () => {
+    setIsLoadingChats(true);
+    try {
+      const response = await fetch("/api/chat/sessions");
+      if (response.ok) {
+        const data = await response.json();
+        setChats(data.chats || []);
+      }
+    } catch (error) {
+      console.error("Ошибка при загрузке списка чатов:", error);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  };
+
+  // Создание нового чата
+  const createNewChat = async () => {
+    try {
+      const response = await fetch("/api/chat/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: `chat-${Date.now()}` }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        await loadChats();
+        setChatId(data.chat.id);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error("Ошибка при создании нового чата:", error);
+    }
+  };
+
+  // Удаление чата
+  const deleteChatById = async (chatIdToDelete: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Предотвращаем переключение на чат при клике на кнопку удаления
+    
+    if (!confirm("Вы уверены, что хотите удалить этот чат?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/chat/sessions?chatId=${chatIdToDelete}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        // Если удаляемый чат был активным, переключаемся на другой чат или создаем новый
+        if (chatIdToDelete === chatId) {
+          const remainingChats = chats.filter(chat => chat.id !== chatIdToDelete);
+          if (remainingChats.length > 0) {
+            setChatId(remainingChats[0].id);
+          } else {
+            // Если не осталось чатов, создаем новый
+            await createNewChat();
+          }
+        }
+        await loadChats();
+      }
+    } catch (error) {
+      console.error("Ошибка при удалении чата:", error);
+    }
+  };
+
+  // Загрузка истории чата при монтировании или смене chatId
+  useEffect(() => {
+    const loadHistory = async () => {
+      setIsLoadingHistory(true);
+      try {
+        const response = await fetch(`/api/chat/history?chatId=${chatId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.messages && data.messages.length > 0) {
+            // Преобразуем сохраненные сообщения в формат UiMessage
+            const loadedMessages: UiMessage[] = data.messages.map((msg: any) => {
+              let reasoningDetails: Record<string, unknown> | undefined = undefined;
+              if (msg.reasoning_details) {
+                try {
+                  reasoningDetails = JSON.parse(msg.reasoning_details);
+                } catch (e) {
+                  console.warn("Ошибка при парсинге reasoning_details:", e);
+                }
+              }
+              
+              return {
+                id: msg.id,
+                role: msg.role as ChatMessage["role"],
+                content: msg.content,
+                reasoning_details: reasoningDetails,
+                responseTime: msg.response_time ?? undefined,
+                usage: msg.usage_prompt_tokens
+                  ? {
+                      prompt_tokens: msg.usage_prompt_tokens,
+                      completion_tokens: msg.usage_completion_tokens ?? 0,
+                      total_tokens: msg.usage_total_tokens ?? 0,
+                    }
+                  : undefined,
+                cost: msg.cost ?? undefined,
+                model: msg.model ?? undefined,
+              };
+            });
+            setMessages(loadedMessages);
+          } else {
+            setMessages([]);
+          }
+        }
+      } catch (error) {
+        console.error("Ошибка при загрузке истории:", error);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    loadHistory();
+  }, [chatId]);
+
+  // Загрузка списка чатов при монтировании
+  useEffect(() => {
+    loadChats();
+  }, []);
+
+  // Обновление списка чатов после сохранения сообщения
+  useEffect(() => {
+    if (messages.length > 0) {
+      loadChats();
+    }
+  }, [messages.length]);
 
   // Обновляем модель при смене провайдера
   useEffect(() => {
@@ -152,6 +310,10 @@ export default function ChatPage() {
 
     const optimisticMessages = [...messages, userMessage];
     setMessages(optimisticMessages);
+    
+    // Сохраняем сообщение пользователя в БД
+    await saveMessageToDb(userMessage);
+    
     setInput("");
     setIsLoading(true);
     setError(null);
@@ -238,9 +400,16 @@ export default function ChatPage() {
           const lastMessage = prev[prev.length - 1]; // Текущий запрос пользователя
           return [summarizedUiMessage, lastMessage, assistantMessage];
         });
+        
+        // Сохраняем суммаризированное сообщение и ответ ассистента
+        await saveMessageToDb(summarizedUiMessage);
+        await saveMessageToDb(assistantMessage);
       } else {
         // Если суммаризации не было, просто добавляем ответ ассистента
         setMessages((prev) => [...prev, assistantMessage]);
+        
+        // Сохраняем ответ ассистента в БД
+        await saveMessageToDb(assistantMessage);
       }
     } catch (requestError) {
       setError(
@@ -253,8 +422,72 @@ export default function ChatPage() {
     }
   };
 
+  // Форматирование даты для отображения
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days === 0) {
+      return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    } else if (days === 1) {
+      return "Вчера";
+    } else if (days < 7) {
+      return `${days} дн. назад`;
+    } else {
+      return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    }
+  };
+
   return (
     <main className="chat-container">
+      <aside className="chat-sidebar">
+        <div className="sidebar-header">
+          <h2 className="sidebar-title">Чаты</h2>
+          <button
+            className="new-chat-button"
+            onClick={createNewChat}
+            disabled={isLoadingChats}
+            title="Создать новый чат"
+          >
+            +
+          </button>
+        </div>
+        <div className="sidebar-chats">
+          {isLoadingChats ? (
+            <div className="sidebar-loading">Загрузка...</div>
+          ) : chats.length === 0 ? (
+            <div className="sidebar-empty">Нет сохраненных чатов</div>
+          ) : (
+            chats.map((chat) => (
+              <div
+                key={chat.id}
+                className={`sidebar-chat-item ${chat.id === chatId ? "active" : ""}`}
+              >
+                <button
+                  className="chat-item-button"
+                  onClick={() => setChatId(chat.id)}
+                >
+                  <div className="chat-item-content">
+                    <div className="chat-item-title">
+                      {chat.id === "default" ? "Основной чат" : `Чат ${chat.id.split("-")[1] || chat.id}`}
+                    </div>
+                    <div className="chat-item-date">{formatDate(chat.updated_at)}</div>
+                  </div>
+                </button>
+                <button
+                  className="chat-item-delete"
+                  onClick={(e) => deleteChatById(chat.id, e)}
+                  title="Удалить чат"
+                >
+                  ×
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
       <section className="chat-window">
         <header className="chat-header">
           <div>
@@ -306,7 +539,12 @@ export default function ChatPage() {
         </div>
 
         <div className="chat-messages">
-          {messages.map((message) => (
+          {isLoadingHistory && (
+            <article className="message message-assistant">
+              <p className="message-author">Загрузка истории...</p>
+            </article>
+          )}
+          {!isLoadingHistory && messages.map((message) => (
             <article
               key={message.id}
               className={`message message-${message.role}`}
@@ -341,7 +579,7 @@ export default function ChatPage() {
               )}
             </article>
           ))}
-          {isLoading && (
+          {!isLoadingHistory && isLoading && (
             <article className="message message-assistant">
               <p className="message-author">AI</p>
               <div className="loading-indicator">
