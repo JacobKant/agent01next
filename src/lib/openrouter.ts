@@ -27,11 +27,21 @@ export type TokenUsage = {
   total_tokens: number;
 };
 
+type OpenRouterTool = {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+};
+
 export async function callOpenRouter(
   messages: ChatMessage[],
   model: string = OPENROUTER_MODEL,
   temperature: number = 1.0,
-  max_tokens?: number
+  max_tokens?: number,
+  tools?: OpenRouterTool[]
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
   if (!OPENROUTER_API_KEY) {
     throw new Error(
@@ -57,6 +67,10 @@ export async function callOpenRouter(
 
   if (max_tokens !== undefined) {
     requestBody.max_tokens = max_tokens;
+  }
+
+  if (tools && tools.length > 0) {
+    requestBody.tools = tools;
   }
 
   console.log("OpenRouter Request JSON:", JSON.stringify(requestBody, null, 2));
@@ -86,8 +100,8 @@ export async function callOpenRouter(
 
   const message = result.choices?.[0]?.message;
 
-  if (!message?.content) {
-    throw new Error("OpenRouter не вернул сообщение ассистента");
+  if (!message) {
+    throw new Error("OpenRouter не вернул сообщение");
   }
 
   const usage: TokenUsage | undefined = result.usage

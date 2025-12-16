@@ -2,42 +2,73 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-// Простой MCP сервер с тестовым инструментом поиска
+// MCP сервер, предоставляющий доступ к API ЦБ РФ по курсам валют
 const server = new McpServer({
-  name: "test-search-server",
-  version: "0.1.0",
+  name: "cbr-rates-server",
+  version: "1.0.0",
 });
 
-// Минимальный и максимально безопасный инструмент, чтобы исключить ошибки схемы
+// Тул для получения курсов валют с https://www.cbr-xml-daily.ru/daily_json.js
 server.tool(
-  "test_search",
+  "cbr_rates",
   {
-    query: z.string().describe("Строка поискового запроса"),
+    code: z
+      .string()
+      .optional()
+      .describe(
+        'Код валюты (например, "USD", "EUR"). Если не указан, возвращаются все валюты.',
+      ),
   },
-  async ({ query }) => {
-    console.log("[MCP server] Вызван test_search с query=", query);
+  async ({ code }) => {
+    console.log("[MCP server] Вызван cbr_rates с code=", code);
 
-    const results = [
-      {
-        id: 1,
-        title: `Тестовый результат для "${query}"`,
-        snippet: `Это простой тестовый результат поиска по запросу "${query}"`,
-      },
-    ];
+    const response = await fetch("https://www.cbr-xml-daily.ru/daily_json.js");
+
+    if (!response.ok) {
+      throw new Error(
+        `Ошибка при запросе к ЦБ РФ: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = (await response.json()) as any;
+
+    let result: unknown;
+
+    if (code) {
+      const upper = code.toUpperCase();
+      const valute = data.Valute?.[upper];
+
+      if (!valute) {
+        result = {
+          error: `Валюта с кодом "${upper}" не найдена в ответе ЦБ РФ`,
+          availableCodes: Object.keys(data.Valute ?? {}),
+        };
+      } else {
+        result = {
+          Date: data.Date,
+          PreviousDate: data.PreviousDate,
+          Timestamp: data.Timestamp,
+          Code: upper,
+          Name: valute.Name,
+          Nominal: valute.Nominal,
+          Value: valute.Value,
+          Previous: valute.Previous,
+        };
+      }
+    } else {
+      result = {
+        Date: data.Date,
+        PreviousDate: data.PreviousDate,
+        Timestamp: data.Timestamp,
+        Valute: data.Valute,
+      };
+    }
 
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify(
-            {
-              query,
-              total: results.length,
-              results,
-            },
-            null,
-            2,
-          ),
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };
