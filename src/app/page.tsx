@@ -20,6 +20,12 @@ type UiMessage = ChatMessage & {
   usage?: TokenUsage;
   cost?: number;
   model?: string; // Сохраняем модель для пересчета стоимости
+  toolsUsed?: Array<{
+    id: string;
+    name: string;
+    arguments: unknown;
+    result: string;
+  }>;
 };
 
 type Provider = "openrouter" | "huggingface";
@@ -110,23 +116,52 @@ export default function ChatPage() {
   // Функция для сохранения сообщения в БД
   const saveMessageToDb = async (message: UiMessage) => {
     try {
-      await fetch("/api/chat/history", {
+      // Убеждаемся, что content всегда строка (не null/undefined)
+      const contentStr =
+        message.content !== null && message.content !== undefined
+          ? String(message.content)
+          : "";
+
+      const payload = {
+        chatId,
+        message: {
+          id: message.id,
+          role: message.role,
+          content: contentStr,
+          reasoning_details: message.reasoning_details,
+          response_time: message.responseTime,
+          usage: message.usage,
+          cost: message.cost,
+          model: message.model,
+          tools_used: message.toolsUsed,
+          tool_calls: message.tool_calls,
+          tool_call_id: message.tool_call_id,
+        },
+      };
+
+      console.log("[saveMessageToDb] Сохранение сообщения:", {
+        messageId: message.id,
+        role: message.role,
+        contentLength: contentStr.length,
+        hasToolCalls: !!message.tool_calls?.length,
+        toolCallsCount: message.tool_calls?.length ?? 0,
+        hasToolCallId: !!message.tool_call_id,
+      });
+
+      const response = await fetch("/api/chat/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatId,
-          message: {
-            id: message.id,
-            role: message.role,
-            content: message.content,
-            reasoning_details: message.reasoning_details,
-            response_time: message.responseTime,
-            usage: message.usage,
-            cost: message.cost,
-            model: message.model,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("[saveMessageToDb] Ошибка ответа:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+        });
+      }
     } catch (error) {
       console.error("Ошибка при сохранении сообщения:", error);
     }
@@ -232,6 +267,9 @@ export default function ChatPage() {
                   : undefined,
                 cost: msg.cost ?? undefined,
                 model: msg.model ?? undefined,
+                toolsUsed: msg.tools_used ?? undefined,
+                tool_calls: msg.tool_calls ?? undefined,
+                tool_call_id: msg.tool_call_id ?? undefined,
               };
             });
             setMessages(loadedMessages);
@@ -354,6 +392,13 @@ export default function ChatPage() {
           message: ChatMessage;
           originalCount: number;
         };
+        tools?: Array<{
+          id: string;
+          name: string;
+          arguments: unknown;
+          result: string;
+        }>;
+        intermediateMessages?: ChatMessage[];
       };
 
       if (!response.ok || !data.message) {
@@ -372,6 +417,38 @@ export default function ChatPage() {
         }
       }
 
+      // Сохраняем все промежуточные сообщения (assistant с tool_calls и tool results)
+      const intermediateUiMessages: UiMessage[] = [];
+      if (data.intermediateMessages && data.intermediateMessages.length > 0) {
+        for (const msg of data.intermediateMessages) {
+          const contentStr =
+            typeof msg.content === "string"
+              ? msg.content
+              : msg.content === null
+              ? ""
+              : Array.isArray(msg.content)
+              ? msg.content
+                  .filter((item: any) => item.type === "text")
+                  .map((item: any) => item.text || "")
+                  .join("")
+              : "";
+
+          const intermediateMsg: UiMessage = {
+            id: crypto.randomUUID(),
+            role: msg.role,
+            content: contentStr,
+            tool_calls: msg.tool_calls,
+            tool_call_id: msg.tool_call_id,
+            ...(msg.reasoning_details && {
+              reasoning_details: msg.reasoning_details,
+            }),
+          };
+          intermediateUiMessages.push(intermediateMsg);
+          // Сохраняем промежуточное сообщение в БД сразу
+          await saveMessageToDb(intermediateMsg);
+        }
+      }
+
       const assistantMessage: UiMessage = {
         id: crypto.randomUUID(),
         role: data.message.role,
@@ -380,6 +457,7 @@ export default function ChatPage() {
         usage: data.usage,
         cost: cost,
         model: model,
+        toolsUsed: data.tools,
         ...(data.message.reasoning_details && {
           reasoning_details: data.message.reasoning_details,
         }),
@@ -395,20 +473,27 @@ export default function ChatPage() {
         };
 
         // Заменяем все сообщения кроме последнего (текущий запрос пользователя) на суммаризированное,
-        // затем добавляем ответ ассистента
+        // затем добавляем промежуточные сообщения и ответ ассистента
         setMessages((prev) => {
           const lastMessage = prev[prev.length - 1]; // Текущий запрос пользователя
-          return [summarizedUiMessage, lastMessage, assistantMessage];
+          return [
+            summarizedUiMessage,
+            lastMessage,
+            ...intermediateUiMessages,
+            assistantMessage,
+          ];
         });
-        
-        // Сохраняем суммаризированное сообщение и ответ ассистента
+
+        // Сохраняем все сообщения в БД
         await saveMessageToDb(summarizedUiMessage);
+        // Промежуточные сообщения уже сохранены выше
         await saveMessageToDb(assistantMessage);
       } else {
-        // Если суммаризации не было, просто добавляем ответ ассистента
-        setMessages((prev) => [...prev, assistantMessage]);
-        
-        // Сохраняем ответ ассистента в БД
+        // Если суммаризации не было, добавляем промежуточные сообщения и ответ ассистента
+        setMessages((prev) => [...prev, ...intermediateUiMessages, assistantMessage]);
+
+        // Сохраняем все сообщения в БД
+        // Промежуточные сообщения уже сохранены выше
         await saveMessageToDb(assistantMessage);
       }
     } catch (requestError) {
@@ -550,9 +635,42 @@ export default function ChatPage() {
               className={`message message-${message.role}`}
             >
               <p className="message-author">
-                {message.role === "user" ? "Вы" : "AI"}
+                {message.role === "user"
+                  ? "Вы"
+                  : message.role === "tool"
+                  ? "Инструмент"
+                  : "AI"}
               </p>
-              <p className="message-content">{message.content}</p>
+              {message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0 ? (
+                <div className="message-content">
+                  {message.content && message.content.trim() && (
+                    <p>{message.content}</p>
+                  )}
+                  <div className="message-tool-calls">
+                    <p className="tool-calls-label">Вызов инструментов:</p>
+                    {message.tool_calls.map((toolCall) => {
+                      let args: any = {};
+                      try {
+                        args = JSON.parse(toolCall.function.arguments);
+                      } catch {
+                        args = {};
+                      }
+                      return (
+                        <div key={toolCall.id} className="tool-call-item">
+                          <span className="tool-call-name">
+                            {toolCall.function.name}
+                          </span>
+                          <span className="tool-call-args">
+                            {JSON.stringify(args, null, 2)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="message-content">{message.content || ""}</p>
+              )}
               {message.role === "assistant" && (
                 <div className="message-meta">
                   {message.responseTime !== undefined && (
@@ -575,6 +693,24 @@ export default function ChatPage() {
                       )}
                     </div>
                   )}
+                  {message.toolsUsed && message.toolsUsed.length > 0 && (
+                    <div className="message-tools">
+                      <span>
+                        Инструменты:{" "}
+                        {message.toolsUsed.map((tool) => tool.name).join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {message.role === "tool" && message.tool_call_id && (
+                <div className="message-tool-result">
+                  <span className="tool-result-label">Результат:</span>
+                  <pre className="tool-result-content">
+                    {typeof message.content === "string"
+                      ? message.content
+                      : JSON.stringify(message.content, null, 2)}
+                  </pre>
                 </div>
               )}
             </article>
