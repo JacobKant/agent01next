@@ -643,7 +643,7 @@ export default function ChatPage() {
               </p>
               {message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0 ? (
                 <div className="message-content">
-                  {message.content && message.content.trim() && (
+                  {message.content && typeof message.content === 'string' && message.content.trim() && (
                     <p>{message.content}</p>
                   )}
                   <div className="message-tool-calls">
@@ -669,7 +669,13 @@ export default function ChatPage() {
                   </div>
                 </div>
               ) : (
-                <p className="message-content">{message.content || ""}</p>
+                <p className="message-content">
+                  {typeof message.content === 'string' 
+                    ? message.content 
+                    : Array.isArray(message.content)
+                    ? message.content.filter(item => item.type === 'text').map(item => item.text).join('')
+                    : ""}
+                </p>
               )}
               {message.role === "assistant" && (
                 <div className="message-meta">
