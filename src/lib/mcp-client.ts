@@ -15,7 +15,11 @@ export type OpenAITool = {
 // Интерфейс для описания MCP сервера
 interface McpServerConfig {
   name: string;
-  serverPath: string;
+  // Для локальных серверов (через tsx)
+  serverPath?: string;
+  // Для готовых npm пакетов (через npx напрямую)
+  command?: string;
+  args?: string[];
 }
 
 // Класс для управления MCP-клиентами (поддержка нескольких серверов)
@@ -39,6 +43,11 @@ export class McpClientManager {
       name: "file-server",
       serverPath: join(process.cwd(), "src", "mcp", "file-server.ts"),
     },
+    {
+      name: "mobile-mcp",
+      command: "npx",
+      args: ["-y", "@mobilenext/mobile-mcp@latest"],
+    },
   ];
 
   async connect(): Promise<OpenAITool[]> {
@@ -49,9 +58,28 @@ export class McpClientManager {
     // Подключаемся к каждому серверу
     for (const serverConfig of this.servers) {
       try {
+        // Определяем команду и аргументы в зависимости от типа сервера
+        let command: string;
+        let args: string[];
+        
+        if (serverConfig.command && serverConfig.args) {
+          // Готовый npm пакет (например, mobile-mcp)
+          command = serverConfig.command;
+          args = serverConfig.args;
+        } else if (serverConfig.serverPath) {
+          // Локальный сервер через tsx
+          command = "npx";
+          args = ["tsx", serverConfig.serverPath];
+        } else {
+          console.error(
+            `[MCP Client] Неверная конфигурация сервера ${serverConfig.name}: должен быть указан либо serverPath, либо command+args`,
+          );
+          continue;
+        }
+
         const transport = new StdioClientTransport({
-          command: "npx",
-          args: ["tsx", serverConfig.serverPath],
+          command,
+          args,
         });
 
         const client = new Client({

@@ -89,11 +89,25 @@ function estimateTokens(text: string): number {
 }
 
 const toPayload = (messages: UiMessage[]): ChatMessage[] =>
-  messages.map(({ role, content, reasoning_details }) => ({
-    role,
-    content,
-    ...(reasoning_details ? { reasoning_details } : {}),
-  }));
+  messages.map(({ role, content, reasoning_details, tool_calls, tool_call_id }) => {
+    const payload: ChatMessage = {
+      role,
+      content,
+    };
+    
+    // Сохраняем все поля, если они определены
+    if (reasoning_details !== undefined) {
+      payload.reasoning_details = reasoning_details;
+    }
+    if (tool_calls !== undefined && tool_calls !== null) {
+      payload.tool_calls = tool_calls;
+    }
+    if (tool_call_id !== undefined && tool_call_id !== null) {
+      payload.tool_call_id = tool_call_id;
+    }
+    
+    return payload;
+  });
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<UiMessage[]>(initialMessages);
