@@ -1,221 +1,105 @@
-import fs from 'fs';
-import { pipeline } from '@xenova/transformers';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { LocalIndex } from 'vectra';
+import { getEmbedding } from './embeddings.js';
+import * as readline from 'readline';
 
-// Функция для вычисления схожести векторов
-function cosineSimilarity(vecA: number[], vecB: number[]): number {
-    let dotProduct = 0;
-    let mA = 0;
-    let mB = 0;
-    for (let i = 0; i < vecA.length; i++) {
-        dotProduct += vecA[i] * vecB[i];
-        mA += vecA[i] * vecA[i];
-        mB += vecB[i] * vecB[i];
-    }
-    const similarity = dotProduct / (Math.sqrt(mA) * Math.sqrt(mB));
-    return isNaN(similarity) ? 0 : similarity;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Функция для чтения ввода из консоли
+function askQuestion(query: string): Promise<string> {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+
+    return new Promise(resolve => {
+        rl.question(query, (answer) => {
+            rl.close();
+            resolve(answer);
+        });
+    });
 }
 
-// Улучшенная функция поиска с контекстом
-function search(
-    queryVector: number[], 
-    index: Array<{vector: number[], text: string, startPos: number, endPos: number}>, 
-    topK: number = 3,
-    minScore: number = 0.2
-) {
-    const results = index
-        .map((item, idx) => ({
-            ...item,
-            score: cosineSimilarity(queryVector, item.vector),
-            index: idx
-        }))
-        .filter(item => item.score >= minScore) // Фильтр по минимальному порогу
-        .sort((a, b) => b.score - a.score)
-        .slice(0, topK);
+async function searchRAG(query?: string) {
+    console.log("🔍 Инициализация RAG поиска...");
     
-    // Если результатов слишком мало, снижаем порог
-    if (results.length === 0 && minScore > 0.05) {
-        console.log(`⚠️ Результатов с порогом ${minScore} не найдено. Снижаем порог до 0.05...`);
-        return search(queryVector, index, topK, 0.05);
+    // Инициализируем индекс Vectra
+    const indexPath = path.join(__dirname, 'vectra_index');
+    const index = new LocalIndex(indexPath);
+
+    // Проверяем существование индекса
+    if (!(await index.isIndexCreated())) {
+        throw new Error(`Индекс не найден в ${indexPath}. Сначала запустите индексацию: npm start`);
+    }
+
+    // Получаем количество элементов через listItems
+    const items = await index.listItems();
+    const itemCount = items.length;
+    console.log(`📊 Найдено ${itemCount} документов в индексе\n`);
+
+    // Получаем запрос от пользователя или из аргументов командной строки
+    let searchQuery = query;
+    if (!searchQuery || !searchQuery.trim()) {
+        searchQuery = await askQuestion("Введите поисковый запрос: ");
     }
     
-    // Если даже с низким порогом ничего не найдено, возвращаем пустой массив
-    if (results.length === 0) {
-        return [];
+    if (!searchQuery.trim()) {
+        console.log("Запрос пуст. Выход.");
+        process.exit(0);
     }
+
+    console.log("\n🧠 Генерация эмбеддинга для запроса...");
     
-    // Добавляем контекст: соседние чанки для лучшего понимания
-    return results.map(result => {
-        const contextChunks = [];
+    try {
+        // Получаем эмбеддинг запроса
+        const queryEmbedding = await getEmbedding(searchQuery);
         
-        // Предыдущий чанк для контекста
-        if (result.index > 0) {
-            contextChunks.push({
-                type: 'previous',
-                text: index[result.index - 1].text
-            });
+        console.log("🔎 Поиск релевантных документов...\n");
+        
+        // Ищем топ-5 наиболее релевантных документов
+        const topK = 5;
+        const allResults = await index.queryItems(queryEmbedding, topK);
+        
+        // Ограничиваем результаты до topK на случай, если метод вернул больше
+        const results = allResults.slice(0, topK);
+        
+        if (results.length === 0) {
+            console.log("❌ Релевантные документы не найдены.");
+            return;
         }
         
-        // Основной найденный чанк
-        contextChunks.push({
-            type: 'main',
-            text: result.text
+        console.log(`✅ Найдено ${results.length} наиболее релевантных документов:\n`);
+        console.log("=".repeat(80));
+        
+        results.forEach((result, index) => {
+            console.log(`\n📄 Результат #${index + 1} (релевантность: ${(result.score * 100).toFixed(2)}%)`);
+            console.log("-".repeat(80));
+            console.log(`Текст:`);
+            console.log(result.item.metadata.text);
+            console.log(`\nМетаданные:`);
+            console.log(`  - Позиция в документе: ${result.item.metadata.startPos} - ${result.item.metadata.endPos}`);
+            console.log(`  - Индекс чанка: ${result.item.metadata.chunkIndex}`);
+            console.log(`  - Путь к документу: ${result.item.metadata.documentPath}`);
+            console.log("=".repeat(80));
         });
         
-        // Следующий чанк для контекста
-        if (result.index < index.length - 1) {
-            contextChunks.push({
-                type: 'next',
-                text: index[result.index + 1].text
-            });
-        }
+        // Выводим контекст для использования в RAG
+        console.log("\n📝 Контекст для RAG (топ-3 результата):\n");
+        const top3Results = results.slice(0, 3);
+        const context = top3Results
+            .map((result, idx) => `[Документ ${idx + 1}, релевантность: ${(result.score * 100).toFixed(2)}%]\n${result.item.metadata.text}`)
+            .join('\n\n--- --- ---\n\n');
+        console.log(context);
         
-        return {
-            ...result,
-            contextChunks,
-            textWithContext: contextChunks.map(chunk => chunk.text).join('\n\n--- --- ---\n\n')
-        };
-    });
-}
-
-// Функция для расширения запроса синонимами
-function expandQuery(query: string): string[] {
-    const synonyms: {[key: string]: string[]} = {
-        'герой': ['персонаж', 'характер', 'главный', 'protagonist'],
-        'главный': ['основной', 'центральный', 'ключевой'],
-        'лисица': ['лиса', 'оборотень', 'лисий'],
-        'оборотень': ['превращение', 'трансформация', 'лисица'],
-        'что': ['какой', 'что такое', 'кто'],
-        'кто': ['какой', 'персонаж', 'герой']
-    };
-    
-    const words = query.toLowerCase().split(/\s+/);
-    const expandedTerms = new Set([query.toLowerCase()]);
-    
-    words.forEach(word => {
-        expandedTerms.add(word);
-        if (synonyms[word]) {
-            synonyms[word].forEach(synonym => expandedTerms.add(synonym));
-        }
-    });
-    
-    return Array.from(expandedTerms);
-}
-
-async function runSearch(query: string) {
-    console.log("📦 Загрузка локальной модели эмбеддингов...");
-    const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-
-    // Загружаем индекс
-    console.log("📄 Загрузка индекса...");
-    const indexRaw = fs.readFileSync('index.json', 'utf-8');
-    const index = JSON.parse(indexRaw);
-    
-    console.log(`📊 Загружено ${index.length} чанков из индекса`);
-
-    // Расширяем запрос
-    const expandedQueries = expandQuery(query);
-    console.log(`🔍 Поиск по запросу: "${query}"`);
-    console.log(`🔄 Расширенный поиск включает: ${expandedQueries.join(', ')}`);
-
-    // Генерируем эмбеддинги для всех вариантов запроса
-    const queryVectors: number[][] = [];
-    
-    for (const expandedQuery of expandedQueries) {
-        try {
-            const queryOutput = await extractor(expandedQuery, { pooling: 'mean', normalize: true });
-            queryVectors.push(Array.from(queryOutput.data as Float32Array));
-        } catch (error) {
-            console.error(`Ошибка при обработке запроса "${expandedQuery}":`, error);
-        }
+    } catch (error) {
+        console.error("❌ Ошибка при выполнении поиска:", error);
+        process.exit(1);
     }
-
-    // Выполняем поиск для каждого варианта запроса и объединяем результаты
-    const allResults: Array<any> = [];
-    
-    for (let i = 0; i < queryVectors.length; i++) {
-        const queryVector = queryVectors[i];
-        const results = search(queryVector, index, 5, 0.15);
-        
-        // Добавляем информацию о том, по какому запросу найден результат
-        results.forEach(result => {
-            result.searchQuery = expandedQueries[i];
-            result.relevanceBoost = i === 0 ? 1.1 : 1.0; // Бустим оригинальный запрос
-            result.adjustedScore = result.score * result.relevanceBoost;
-        });
-        
-        allResults.push(...results);
-    }
-
-    // Убираем дубликаты и сортируем по скорректированному скору
-    const uniqueResults = new Map<number, any>();
-    
-    allResults.forEach(result => {
-        const existing = uniqueResults.get(result.index);
-        if (!existing || result.adjustedScore > existing.adjustedScore) {
-            uniqueResults.set(result.index, result);
-        }
-    });
-
-    const finalResults = Array.from(uniqueResults.values())
-        .sort((a, b) => b.adjustedScore - a.adjustedScore)
-        .slice(0, 3);
-
-    // Выводим результаты
-    if (finalResults.length === 0) {
-        console.log("❌ Релевантных результатов не найдено");
-        console.log("💡 Попробуйте:");
-        console.log("   - Использовать более простые слова");
-        console.log("   - Изменить формулировку запроса");
-        console.log("   - Указать конкретные имена или термины из текста");
-        return;
-    }
-
-    console.log("✅ Результаты поиска:");
-    console.log(`🎯 Найдено ${finalResults.length} релевантных результатов\n`);
-
-    finalResults.forEach((result, i) => {
-        console.log(`${'='.repeat(80)}`);
-        console.log(`📍 РЕЗУЛЬТАТ ${i + 1}`);
-        console.log(`🎯 Релевантность: ${(result.adjustedScore * 100).toFixed(1)}% (исходный запрос: "${result.searchQuery}")`);
-        console.log(`📍 Позиция в тексте: ${result.startPos}-${result.endPos}`);
-        console.log(`${'='.repeat(80)}`);
-        
-        if (result.contextChunks && result.contextChunks.length > 1) {
-            // Показываем контекст
-            result.contextChunks.forEach((chunk: any, chunkIndex: number) => {
-                if (chunk.type === 'previous') {
-                    console.log(`📄 ПРЕДЫДУЩИЙ КОНТЕКСТ:`);
-                    console.log(chunk.text.slice(-200) + '...\n');
-                } else if (chunk.type === 'main') {
-                    console.log(`🎯 ОСНОВНОЙ РЕЗУЛЬТАТ:`);
-                    console.log(chunk.text + '\n');
-                } else if (chunk.type === 'next') {
-                    console.log(`📄 СЛЕДУЮЩИЙ КОНТЕКСТ:`);
-                    console.log('...' + chunk.text.slice(0, 200) + '\n');
-                }
-            });
-        } else {
-            console.log(result.text);
-        }
-        
-        console.log(`${'='.repeat(80)}\n`);
-    });
-
-    // Статистика поиска
-    console.log(`📊 СТАТИСТИКА ПОИСКА:`);
-    console.log(`   - Обработано запросов: ${expandedQueries.length}`);
-    console.log(`   - Всего кандидатов: ${allResults.length}`);
-    console.log(`   - Финальных результатов: ${finalResults.length}`);
-    console.log(`   - Максимальная релевантность: ${finalResults.length > 0 ? (finalResults[0].adjustedScore * 100).toFixed(1) + '%' : 'N/A'}`);
 }
 
 // Запускаем поиск
-if (process.argv[2]) {
-    runSearch(process.argv[2]).catch(console.error);
-} else {
-    console.error("❌ Пожалуйста, укажите поисковый запрос.");
-    console.log("📝 Пример использования:");
-    console.log("   npm run search \"кто главный герой\"");
-    console.log("   npm run search \"что такое лисица оборотень\"");
-    process.exit(1);
-}
+// Поддерживаем аргумент командной строки для запроса
+const queryArg = process.argv[2];
+searchRAG(queryArg).catch(console.error);

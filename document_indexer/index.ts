@@ -1,5 +1,11 @@
 import fs from 'fs';
-import { pipeline } from '@xenova/transformers';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { LocalIndex } from 'vectra';
+import { getEmbedding } from './embeddings.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Улучшенная функция предобработки текста
 function preprocessText(text: string): string {
@@ -75,107 +81,86 @@ function splitText(text: string, chunkSize: number, overlap: number): Array<{tex
     return chunks;
 }
 
-// Функция для вычисления схожести векторов (Cosine Similarity)
-function cosineSimilarity(vecA: number[], vecB: number[]): number {
-    let dotProduct = 0;
-    let mA = 0;
-    let mB = 0;
-    for (let i = 0; i < vecA.length; i++) {
-        dotProduct += vecA[i] * vecB[i];
-        mA += vecA[i] * vecA[i];
-        mB += vecB[i] * vecB[i];
-    }
-    const similarity = dotProduct / (Math.sqrt(mA) * Math.sqrt(mB));
-    return isNaN(similarity) ? 0 : similarity;
-}
-
-// Улучшенная функция поиска с контекстом
-function search(queryVector: number[], index: Array<{vector: number[], text: string, startPos: number, endPos: number}>, topK: number = 3) {
-    const results = index
-        .map((item, idx) => ({
-            ...item,
-            score: cosineSimilarity(queryVector, item.vector),
-            index: idx
-        }))
-        .filter(item => item.score > 0.1) // Фильтруем слишком нерелевантные результаты
-        .sort((a, b) => b.score - a.score)
-        .slice(0, topK);
-    
-    // Добавляем контекст: соседние чанки
-    return results.map(result => {
-        const contextChunks = [];
-        
-        // Предыдущий чанк
-        if (result.index > 0) {
-            contextChunks.push(index[result.index - 1].text);
-        }
-        
-        // Основной чанк
-        contextChunks.push(result.text);
-        
-        // Следующий чанк
-        if (result.index < index.length - 1) {
-            contextChunks.push(index[result.index + 1].text);
-        }
-        
-        return {
-            ...result,
-            textWithContext: contextChunks.join('\n\n--- --- ---\n\n')
-        };
-    });
-}
-
 async function runPipeline() {
-    console.log("📦 Загрузка локальной модели эмбеддингов...");
-    // Используем одну из лучших компактных моделей: Xenova/all-MiniLM-L6-v2
-    const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    console.log("📦 Инициализация Vectra индекса...");
+    
+    // Инициализируем индекс Vectra
+    const indexPath = path.join(__dirname, 'vectra_index');
+    const index = new LocalIndex(indexPath);
+
+    // Создаем индекс если его нет
+    if (!(await index.isIndexCreated())) {
+        console.log("📁 Создание нового индекса...");
+        await index.createIndex();
+    } else {
+        // Получаем количество элементов через listItems
+        const items = await index.listItems();
+        const existingCount = items.length;
+        console.log(`📁 Использование существующего индекса (содержит ${existingCount} документов)...`);
+        console.log("⚠️  Внимание: новые документы будут добавлены к существующим.");
+    }
 
     // Читаем и предобрабатываем документ
     console.log("📄 Чтение и предобработка документа...");
-    const rawText = fs.readFileSync('data/vpKnigaOborotnya.txt', 'utf-8');
+    const dataPath = path.join(__dirname, 'data', 'vpKnigaOborotnya.txt');
+    
+    if (!fs.existsSync(dataPath)) {
+        throw new Error(`Файл не найден: ${dataPath}`);
+    }
+    
+    const rawText = fs.readFileSync(dataPath, 'utf-8');
     const preprocessedText = preprocessText(rawText);
     
     // Улучшенное разделение на чанки
-    const chunks = splitText(preprocessedText, 1200, 200); // Увеличили размер чанка и перекрытие
+    const chunks = splitText(preprocessedText, 1200, 200);
     console.log(`✂️ Текст разбит на ${chunks.length} чанков (размер: 1200 символов, перекрытие: 200)`);
 
-    // Генерируем эмбеддинги
-    console.log("🧠 Генерация эмбеддингов...");
-    const embeddings: number[][] = [];
+    // Генерируем эмбеддинги и добавляем в индекс
+    console.log("🧠 Генерация эмбеддингов через OpenRouter API...");
+    
+    let processedCount = 0;
+    let errorCount = 0;
     
     for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         try {
-            const output = await extractor(chunk.text, { pooling: 'mean', normalize: true });
-            embeddings.push(Array.from(output.data as Float32Array));
+            console.log(`Обработка чанка ${i + 1}/${chunks.length}...`);
             
+            // Получаем эмбеддинг через OpenRouter API
+            const embedding = await getEmbedding(chunk.text);
+            
+            // Добавляем в индекс Vectra
+            await index.insertItem({
+                vector: embedding,
+                metadata: {
+                    text: chunk.text,
+                    startPos: chunk.startPos,
+                    endPos: chunk.endPos,
+                    chunkIndex: i,
+                    documentPath: dataPath
+                }
+            });
+            
+            processedCount++;
+            
+            // Небольшая задержка чтобы не перегружать API
             if ((i + 1) % 10 === 0) {
                 console.log(`Прогресс: обработано ${i + 1} из ${chunks.length} чанков.`);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 1 секунда задержки каждые 10 чанков
             }
         } catch (error) {
-            console.error(`Ошибка при обработке чанка ${i}:`, error);
-            // Создаем пустой эмбеддинг как fallback
-            embeddings.push(new Array(384).fill(0)); // Размерность модели all-MiniLM-L6-v2
+            console.error(`Ошибка при обработке чанка ${i + 1}:`, error);
+            errorCount++;
         }
     }
-
-    // Создаем улучшенный индекс
-    const index = chunks.map((chunk, i) => ({
-        vector: embeddings[i],
-        text: chunk.text,
-        startPos: chunk.startPos,
-        endPos: chunk.endPos
-    }));
-
-    // Сохраняем улучшенный индекс
-    fs.writeFileSync('index.json', JSON.stringify(index));
-    fs.writeFileSync('metadata.json', JSON.stringify(chunks));
     
-    console.log("✅ Улучшенный индекс создан (index.json + metadata.json)");
+    console.log("\n✅ Индексация завершена!");
     console.log(`📊 Статистика:`);
     console.log(`   - Всего чанков: ${chunks.length}`);
+    console.log(`   - Успешно обработано: ${processedCount}`);
+    console.log(`   - Ошибок: ${errorCount}`);
     console.log(`   - Средний размер чанка: ${Math.round(chunks.reduce((sum, chunk) => sum + chunk.text.length, 0) / chunks.length)} символов`);
-    console.log(`   - Размер файла индекса: ${Math.round(fs.statSync('index.json').size / 1024 / 1024 * 100) / 100} МБ`);
+    console.log(`   - Индекс сохранен в: ${indexPath}`);
 }
 
 runPipeline().catch(console.error);

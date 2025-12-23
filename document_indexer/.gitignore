@@ -1,1 +1,5 @@
 node_modules
+vectra_index
+dist
+*.log
+.env.local
