@@ -7,6 +7,7 @@ export async function GET() {
     const chats = getAllChats();
     return NextResponse.json({ chats }, { status: 200 });
   } catch (error) {
+    console.error("Ошибка GET /api/chat/sessions:", error);
     const message =
       error instanceof Error ? error.message : "Неизвестная ошибка";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ chat }, { status: 200 });
   } catch (error) {
+    console.error("Ошибка POST /api/chat/sessions:", error);
     const message =
       error instanceof Error ? error.message : "Неизвестная ошибка";
     return NextResponse.json({ error: message }, { status: 500 });

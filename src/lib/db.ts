@@ -3,12 +3,8 @@ import path from "path";
 import fs from "fs";
 
 // Путь к файлу базы данных
-const DB_PATH = path.join(process.cwd(), "data", "chats.db");
-
-// Убеждаемся, что директория существует
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+function getDbPath(): string {
+  return path.join(process.cwd(), "data", "chats.db");
 }
 
 // Создаем экземпляр базы данных
@@ -16,17 +12,31 @@ let db: Database.Database | null = null;
 
 function getDb(): Database.Database {
   if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL"); // Включаем режим WAL для лучшей производительности
-    
-    // Создаем таблицы, если их еще нет
-    initializeDatabase();
+    try {
+      const DB_PATH = getDbPath();
+      
+      // Убеждаемся, что директория существует
+      const dbDir = path.dirname(DB_PATH);
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
+      
+      db = new Database(DB_PATH);
+      db.pragma("journal_mode = WAL"); // Включаем режим WAL для лучшей производительности
+      
+      // Создаем таблицы, если их еще нет
+      initializeDatabase(db);
+    } catch (error) {
+      db = null;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("Ошибка инициализации базы данных:", errorMessage);
+      throw new Error(`Ошибка инициализации базы данных: ${errorMessage}`);
+    }
   }
   return db;
 }
 
-function initializeDatabase() {
-  const database = getDb();
+function initializeDatabase(database: Database.Database) {
 
   // Таблица для чатов (сессий)
   database.exec(`
@@ -127,31 +137,35 @@ export type ChatSession = {
 
 // Получить или создать чат-сессию
 export function getOrCreateChat(chatId: string = "default"): ChatSession {
-  const database = getDb();
-  
-  const existing = database
-    .prepare("SELECT * FROM chats WHERE id = ?")
-    .get(chatId) as ChatSession | undefined;
-  
-  if (existing) {
-    // Обновляем время последнего обновления
+  try {
+    const database = getDb();
+    
+    const existing = database
+      .prepare("SELECT * FROM chats WHERE id = ?")
+      .get(chatId) as ChatSession | undefined;
+    
+    if (existing) {
+      // Обновляем время последнего обновления
+      database
+        .prepare("UPDATE chats SET updated_at = ? WHERE id = ?")
+        .run(Date.now(), chatId);
+      return existing;
+    }
+    
+    // Создаем новую сессию
+    const now = Date.now();
     database
-      .prepare("UPDATE chats SET updated_at = ? WHERE id = ?")
-      .run(Date.now(), chatId);
-    return existing;
+      .prepare("INSERT INTO chats (id, created_at, updated_at) VALUES (?, ?, ?)")
+      .run(chatId, now, now);
+    
+    return {
+      id: chatId,
+      created_at: now,
+      updated_at: now,
+    };
+  } catch (error) {
+    throw new Error(`Ошибка при получении/создании чата: ${error instanceof Error ? error.message : String(error)}`);
   }
-  
-  // Создаем новую сессию
-  const now = Date.now();
-  database
-    .prepare("INSERT INTO chats (id, created_at, updated_at) VALUES (?, ?, ?)")
-    .run(chatId, now, now);
-  
-  return {
-    id: chatId,
-    created_at: now,
-    updated_at: now,
-  };
 }
 
 // Сохранить сообщение
@@ -311,13 +325,17 @@ export function loadMessages(chatId: string = "default"): LoadedMessage[] {
 
 // Получить список всех чатов
 export function getAllChats(): ChatSession[] {
-  const database = getDb();
-  
-  const chats = database
-    .prepare("SELECT * FROM chats ORDER BY updated_at DESC")
-    .all() as ChatSession[];
-  
-  return chats;
+  try {
+    const database = getDb();
+    
+    const chats = database
+      .prepare("SELECT * FROM chats ORDER BY updated_at DESC")
+      .all() as ChatSession[];
+    
+    return chats;
+  } catch (error) {
+    throw new Error(`Ошибка при получении списка чатов: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 // Удалить чат и все его сообщения

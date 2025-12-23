@@ -44,6 +44,10 @@ export class McpClientManager {
       serverPath: join(process.cwd(), "src", "mcp", "file-server.ts"),
     },
     {
+      name: "rag-search-server",
+      serverPath: join(process.cwd(), "src", "mcp", "rag-server.ts"),
+    },
+    {
       name: "mobile-mcp",
       command: "npx",
       args: ["-y", "@mobilenext/mobile-mcp@latest"],

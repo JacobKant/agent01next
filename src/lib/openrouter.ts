@@ -4,7 +4,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL = "openai/gpt-oss-20b:free";
 
-const SYSTEM_PROMPT = `Ты универсальный AI помощник.`;
+const SYSTEM_PROMPT = `Ты универсальный AI помощник. В базе знаний у тебя есть полностью книга "Священная книга оборотня" Виктора Пелевина`;
 
 type OpenRouterChoice = {
   message?: ChatMessage;
