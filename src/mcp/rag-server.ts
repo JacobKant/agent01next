@@ -14,13 +14,36 @@ const server = new McpServer({
 // Путь к индексу Vectra
 const INDEX_PATH = join(process.cwd(), "document_indexer", "vectra_index");
 
+
+const MIN_RELEVANCE_THRESHOLD = 0.35;
+
 // Тул для поиска в RAG базе знаний
 server.tool(
   "search_rag",
   {
     query: z
       .string()
-      .describe("Поисковый запрос для поиска в базе знаний"),
+      .describe(
+        `Поисковый запрос для семантического (векторного) поиска в базе знаний.
+        
+ВАЖНО: Это векторный поиск, который находит тексты семантически схожие с запросом. 
+НЕ используйте прямые вопросы типа "Что такое X?" или "Как работает Y?".
+
+ПРАВИЛЬНО: Используйте ключевые слова, фразы или термины, которые вы ожидаете найти в тексте.
+- ✅ "оборотные активы баланс"
+- ✅ "амортизация основных средств"
+- ✅ "налоговый вычет НДС"
+- ✅ "бухгалтерский учет прибыль"
+
+НЕПРАВИЛЬНО: Не задавайте вопросы напрямую.
+- ❌ "Что такое оборотные активы?"
+- ❌ "Как рассчитать амортизацию?"
+- ❌ "Объясните налоговый вычет"
+
+Принцип работы: Система ищет фрагменты текста, которые содержат семантически похожие 
+концепции, термины и фразы. Чем больше ключевых слов из вашего запроса присутствует 
+в документе (или их семантических эквивалентов), тем выше релевантность результата.`
+      ),
     topK: z
       .number()
       .optional()
@@ -87,7 +110,30 @@ server.tool(
       console.log(`[MCP rag-server] Поиск ${limit} наиболее релевантных документов...`);
       // Используем тот же формат, что и в document_indexer/search.ts
       const allResults = await (index as any).queryItems(queryEmbedding, limit);
-      const results = allResults.slice(0, limit);
+      const initialResults = allResults.slice(0, limit);
+
+      // ВТОРОЙ ЭТАП: Фильтрация по порогу релевантности
+      const threshold = MIN_RELEVANCE_THRESHOLD;
+      let results = initialResults;
+      let filteredCount = 0;
+
+      if (threshold > 0) {
+        console.log(`[MCP rag-server] Применение фильтра релевантности (порог: ${threshold.toFixed(3)})...`);
+        const beforeFilterCount = results.length;
+        results = results.filter((result: any) => result.score >= threshold);
+        filteredCount = beforeFilterCount - results.length;
+        
+        if (filteredCount > 0) {
+          console.log(`[MCP rag-server] Отфильтровано ${filteredCount} результатов ниже порога ${threshold.toFixed(3)} (было: ${beforeFilterCount}, осталось: ${results.length})`);
+        } else {
+          console.log(`[MCP rag-server] Все результаты прошли фильтр релевантности`);
+        }
+        
+        // Логируем информацию о фильтрации даже если все результаты отфильтрованы
+        if (results.length === 0 && beforeFilterCount > 0) {
+          console.log(`[MCP rag-server] ВНИМАНИЕ: Все ${beforeFilterCount} результатов были отфильтрованы из-за порога релевантности ${threshold.toFixed(3)}`);
+        }
+      }
 
       if (results.length === 0) {
         return {
@@ -146,7 +192,14 @@ server.tool(
         resultsCount: results.length,
         totalDocumentsInIndex: itemCount,
         context: context,
-        summary: `Найдено ${results.length} релевантных документов. Показаны топ-${formattedResults.length} с релевантностью от ${formattedResults[0]?.relevance || "N/A"}.`,
+        filtering: threshold > 0 ? {
+          threshold: threshold,
+          filteredOut: filteredCount,
+          initialCount: initialResults.length,
+        } : undefined,
+        summary: threshold > 0 && filteredCount > 0
+          ? `Найдено ${initialResults.length} документов, после фильтрации (порог ${threshold.toFixed(3)}) осталось ${results.length}. Показаны топ-${formattedResults.length} с релевантностью от ${formattedResults[0]?.relevance || "N/A"}.`
+          : `Найдено ${results.length} релевантных документов. Показаны топ-${formattedResults.length} с релевантностью от ${formattedResults[0]?.relevance || "N/A"}.`,
       };
 
       console.log(
