@@ -4,6 +4,7 @@ import { z } from "zod";
 import { LocalIndex } from "vectra";
 import { join } from "path";
 import { getEmbedding } from "../lib/embeddings.js";
+import { metadata } from "@/app/layout.jsx";
 
 // MCP сервер, предоставляющий доступ к RAG базе знаний
 const server = new McpServer({
@@ -15,7 +16,7 @@ const server = new McpServer({
 const INDEX_PATH = join(process.cwd(), "document_indexer", "vectra_index");
 
 
-const MIN_RELEVANCE_THRESHOLD = 0.35;
+const MIN_RELEVANCE_THRESHOLD = 0.5;
 
 // Тул для поиска в RAG базе знаний
 server.tool(
@@ -33,16 +34,13 @@ server.tool(
 - ✅ "оборотные активы баланс"
 - ✅ "амортизация основных средств"
 - ✅ "налоговый вычет НДС"
-- ✅ "бухгалтерский учет прибыль"
+- ✅ "бухгалтерский учет прибыль" 
 
-НЕПРАВИЛЬНО: Не задавайте вопросы напрямую.
-- ❌ "Что такое оборотные активы?"
-- ❌ "Как рассчитать амортизацию?"
-- ❌ "Объясните налоговый вычет"
-
-Принцип работы: Система ищет фрагменты текста, которые содержат семантически похожие 
-концепции, термины и фразы. Чем больше ключевых слов из вашего запроса присутствует 
-в документе (или их семантических эквивалентов), тем выше релевантность результата.`
+В данной базе знаний хранятся следующие документы
+История чата "Рейсовые методы"
+История чата "Рейсоклан 2.0"
+Книга Виктора Пелевина "Священная книга оборотня"
+`
       ),
     topK: z
       .number()
@@ -105,8 +103,8 @@ server.tool(
 
       // Ищем наиболее релевантные документы
       // Ограничиваем максимум 10 результатов для безопасности
-      const requestedLimit = topK || 3;
-      const limit = Math.min(requestedLimit, 10);
+      const requestedLimit = 25 | 5;
+      const limit = Math.min(requestedLimit, 25);
       console.log(`[MCP rag-server] Поиск ${limit} наиболее релевантных документов...`);
       // Используем тот же формат, что и в document_indexer/search.ts
       const allResults = await (index as any).queryItems(queryEmbedding, limit);
@@ -154,35 +152,29 @@ server.tool(
         };
       }
 
-      // Функция для ограничения длины текста
-      const truncateText = (text: string, maxLength: number = 800): string => {
-        if (text.length <= maxLength) return text;
-        return text.slice(0, maxLength) + "... [текст обрезан]";
-      };
-
-      // Формируем компактные результаты (только топ-3 для контекста)
-      const topResults = results.slice(0, 3);
-      const formattedResults = topResults.map((result: any, index: number) => {
+      const formattedResults = results.map((result: any, index: number) => {
         const fullText = result.item.metadata.text as string;
-        const truncatedText = truncateText(fullText, 800);
         
         return {
           rank: index + 1,
           score: result.score,
           relevance: `${(result.score * 100).toFixed(2)}%`,
-          text: truncatedText,
+          text: fullText,
           textLength: fullText.length,
           metadata: {
-            chunkIndex: result.item.metadata.chunkIndex as number,
-          },
+            documentPath: result.item.metadata.documentPath,
+            startPos: result.item.metadata.startPos,
+            endPos: result.item.metadata.endPos,
+            chunkIndex: result.item.metadata.chunkIndex,
+          }
         };
       });
 
       // Формируем компактный контекст для RAG
       const context = formattedResults
         .map(
-          (result: { relevance: string; text: string }, idx: number) =>
-            `[Документ ${idx + 1}, релевантность: ${result.relevance}]\n${result.text}`
+          (result: { relevance: string; text: string, metadata: any }, idx: number) =>
+            `[Документ ${result.metadata.documentPath}, релевантность: ${result.relevance}, чанк: ${result.metadata.chunkIndex}]\n${result.text}`
         )
         .join("\n\n--- --- ---\n\n");
 

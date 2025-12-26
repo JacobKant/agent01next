@@ -102,7 +102,7 @@ async function runPipeline() {
 
     // Читаем и предобрабатываем документ
     console.log("📄 Чтение и предобработка документа...");
-    const dataPath = path.join(__dirname, 'data', 'vpKnigaOborotnya.txt');
+    const dataPath = path.join(__dirname, 'data', 'telegaChat2_parsed.txt');
     
     if (!fs.existsSync(dataPath)) {
         throw new Error(`Файл не найден: ${dataPath}`);

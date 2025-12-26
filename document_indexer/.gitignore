@@ -3,3 +3,4 @@ vectra_index
 dist
 *.log
 .env.local
+data

@@ -7,6 +7,7 @@
   "scripts": {
     "start": "tsx index.ts",
     "search": "tsx search.ts",
+    "parse-telegram": "tsx parse-telegram.ts",
     "build": "tsc"
   },
   "dependencies": {
