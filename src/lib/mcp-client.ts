@@ -46,6 +46,10 @@ export class McpClientManager {
     {
       name: "rag-search-server",
       serverPath: join(process.cwd(), "src", "mcp", "rag-server.ts"),
+    },
+    {
+      name: "git-server",
+      serverPath: join(process.cwd(), "src", "mcp", "git-server.ts"),
     }
   ];
 
