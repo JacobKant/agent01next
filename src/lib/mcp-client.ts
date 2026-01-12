@@ -46,12 +46,7 @@ export class McpClientManager {
     {
       name: "rag-search-server",
       serverPath: join(process.cwd(), "src", "mcp", "rag-server.ts"),
-    },
-    {
-      name: "mobile-mcp",
-      command: "npx",
-      args: ["-y", "@mobilenext/mobile-mcp@latest"],
-    },
+    }
   ];
 
   async connect(): Promise<OpenAITool[]> {

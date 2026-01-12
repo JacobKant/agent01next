@@ -1,36 +1,190 @@
-## AI чат на Next.js + OpenRouter
+# Agent01Next - AI Чат с расширенными возможностями
 
+Интеллектуальный чат-бот на базе Next.js с поддержкой множественных LLM провайдеров, расширяемой функциональности через MCP (Model Context Protocol) и RAG (Retrieval-Augmented Generation).
 
-### Быстрый старт
+## 🎯 Назначение проекта
 
-1. Скопируйте пример настроек в файл .env.localи добавьте свой ключ:
-```bash
-cp env.local.example .env.local
-# затем пропишите OPENROUTER_API_KEY=...
+Проект представляет собой полнофункциональную платформу для взаимодействия с AI моделями, которая включает:
+
+- **Мультипровайдерность**: Поддержка OpenRouter и HuggingFace API
+- **Расширяемость**: Интеграция через MCP серверы для добавления новых инструментов
+- **RAG**: Семантический поиск по индексированным документам
+- **Планировщик задач**: Автоматическое выполнение задач по расписанию
+- **История чатов**: Сохранение и управление сессиями диалогов
+
+## 📁 Структура проекта
+
+```
+agent01next/
+├── src/
+│   ├── app/                    # Next.js приложение
+│   │   ├── api/               # API endpoints
+│   │   │   ├── chat/         # Чат API (история, сессии)
+│   │   │   └── scheduler/     # Управление планировщиком
+│   │   ├── page.tsx          # Главная страница чата
+│   │   └── layout.tsx        # Layout приложения
+│   ├── lib/                   # Библиотеки и утилиты
+│   │   ├── mcp-client.ts     # Клиент для MCP серверов
+│   │   ├── chat-executor.ts  # Исполнитель чата с поддержкой инструментов
+│   │   ├── openrouter.ts     # Интеграция с OpenRouter API
+│   │   ├── huggingface.ts    # Интеграция с HuggingFace API
+│   │   ├── embeddings.ts     # Генерация эмбеддингов
+│   │   ├── db.ts             # Работа с SQLite БД
+│   │   ├── scheduler.ts      # Планировщик задач (cron)
+│   │   └── tasks/            # Задачи планировщика
+│   │       ├── currency-task.ts
+│   │       └── index.ts
+│   ├── mcp/                   # MCP серверы
+│   │   ├── server.ts         # Сервер курсов валют ЦБ РФ
+│   │   ├── web-server.ts     # Сервер веб-поиска
+│   │   ├── file-server.ts    # Сервер работы с файлами
+│   │   └── rag-server.ts     # Сервер RAG поиска
+│   └── types/                 # TypeScript типы
+│       └── chat.ts
+├── document_indexer/          # Подпроект индексации документов
+│   ├── index.ts              # Скрипт индексации
+│   ├── search.ts             # Тестовый поиск
+│   ├── embeddings.ts         # Генерация эмбеддингов
+│   └── vectra_index/         # Векторная БД (создается автоматически)
+├── data/                      # Данные приложения
+│   ├── chats.db             # SQLite база данных чатов
+│   └── files/                # Файлы для обработки
+├── doc/                       # Документация проекта
+│   ├── ARCHITECTURE.md      # Правила архитектуры
+│   ├── SETUP.md              # Руководство по настройке
+│   ├── RAG_INDEXER.md        # Документация по индексации
+│   ├── MCP_SERVERS.md        # Документация по MCP серверам
+│   └── SCHEDULER.md          # Документация по планировщику
+└── public/                    # Статические файлы
 ```
 
-2. Установите зависимости и запустите dev-сервер:
+## 🚀 Быстрый старт
+
+### 1. Установка зависимостей
+
 ```bash
 npm install
+```
+
+### 2. Настройка переменных окружения
+
+Скопируйте пример файла настроек:
+
+```bash
+cp env.local.example .env.local
+```
+
+Отредактируйте `.env.local` и добавьте необходимые ключи:
+
+```env
+OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+```
+
+### 3. Запуск приложения
+
+```bash
 npm run dev
 ```
 
-3. Откройте [http://localhost:3000](http://localhost:3000) и начните переписку. Клиент ведёт историю сообщений и передаёт их на endpoint `/api/chat`.
+Откройте [http://localhost:3000](http://localhost:3000) в браузере.
 
-### Переменные окружения
+## 🔧 Основные компоненты
+
+### MCP (Model Context Protocol) Серверы
+
+Проект использует MCP для расширения функциональности AI через внешние инструменты:
+
+- **cbr-rates-server**: Получение курсов валют ЦБ РФ
+- **web-fetch-server**: Веб-поиск и получение контента с сайтов
+- **file-server**: Работа с файловой системой
+- **rag-search-server**: Семантический поиск по индексированным документам
+
+Подробнее: [doc/MCP_SERVERS.md](doc/MCP_SERVERS.md)
+
+### RAG (Retrieval-Augmented Generation)
+
+Система семантического поиска по документам с использованием векторной базы данных Vectra:
+
+- Индексация документов с разбивкой на чанки
+- Генерация эмбеддингов через OpenRouter API
+- Семантический поиск по индексированным документам
+
+Подробнее: [doc/RAG_INDEXER.md](doc/RAG_INDEXER.md)
+
+### Планировщик задач
+
+Автоматическое выполнение задач по расписанию (cron):
+
+- Проверка курсов валют
+- Отправка уведомлений в Telegram
+- Выполнение произвольных задач с использованием AI
+
+Подробнее: [doc/SCHEDULER.md](doc/SCHEDULER.md)
+
+### База данных
+
+SQLite база данных для хранения:
+
+- Сессий чатов (chats)
+- Сообщений с метаданными (messages)
+- История использования инструментов
+
+## 📚 Документация
+
+Полная документация находится в папке `doc/`:
+
+- [ARCHITECTURE.md](doc/ARCHITECTURE.md) - Правила архитектуры проекта
+- [SETUP.md](doc/SETUP.md) - Подробное руководство по настройке
+- [RAG_INDEXER.md](doc/RAG_INDEXER.md) - Документация по индексации документов
+- [MCP_SERVERS.md](doc/MCP_SERVERS.md) - Документация по MCP серверам
+- [SCHEDULER.md](doc/SCHEDULER.md) - Документация по планировщику задач
+
+## 🔑 Переменные окружения
 
 | Ключ | Назначение | Значение по умолчанию |
 | --- | --- | --- |
-| `OPENROUTER_API_KEY` | обязательный ключ доступа к OpenRouter | — |
-| `OPENROUTER_MODEL` | идентификатор модели | `x-ai/grok-4.1-fast:free` |
-| `OPENROUTER_BASE_URL` | базовый URL API | `https://openrouter.ai/api/v1/chat/completions` |
-| `OPENROUTER_HTTP_REFERER` | передаётся в заголовке `HTTP-Referer` | `http://localhost:3000` |
-| `OPENROUTER_APP_NAME` | значение заголовка `X-Title` | `Agent01 Chat` |
+| `OPENROUTER_API_KEY` | **Обязательно** - ключ доступа к OpenRouter | — |
+| `HF_TOKEN` | Токен для HuggingFace API | — |
+| `TELEGRAM_BOT_TOKEN` | Токен Telegram бота для уведомлений | — |
+| `OPENROUTER_MODEL` | Идентификатор модели OpenRouter | `x-ai/grok-4.1-fast:free` |
+| `OPENROUTER_BASE_URL` | Базовый URL API OpenRouter | `https://openrouter.ai/api/v1/chat/completions` |
+| `OPENROUTER_HTTP_REFERER` | Заголовок HTTP-Referer | `http://localhost:3000` |
+| `OPENROUTER_APP_NAME` | Значение заголовка X-Title | `Agent01 Chat` |
 
-### Проверка и билды
+## 🛠️ Команды разработки
 
 ```bash
-npm run lint  # проверка линтером
-npm run build # production-сборка
-npm run start # запуск собранного приложения
+npm run dev      # Запуск dev-сервера
+npm run build    # Production-сборка
+npm run start    # Запуск собранного приложения
+npm run lint     # Проверка линтером
+npm run mcp:server  # Запуск MCP сервера (для тестирования)
 ```
+
+## 📦 Технологии
+
+- **Next.js 14** - React фреймворк
+- **TypeScript** - Типизированный JavaScript
+- **SQLite (better-sqlite3)** - База данных
+- **Vectra** - Векторная база данных для RAG
+- **Model Context Protocol (MCP)** - Протокол расширения функциональности
+- **node-cron** - Планировщик задач
+- **OpenRouter API** - Провайдер LLM моделей
+- **HuggingFace API** - Альтернативный провайдер LLM
+
+## 🎨 Особенности
+
+- ✅ Поддержка множественных LLM провайдеров
+- ✅ Расширяемая архитектура через MCP
+- ✅ RAG для работы с документами
+- ✅ Автоматическое выполнение задач по расписанию
+- ✅ Сохранение истории чатов
+- ✅ Отслеживание использования токенов и стоимости
+- ✅ Поддержка tool calls (вызов инструментов)
+- ✅ Интеграция с Telegram для уведомлений
+
+## 📝 Лицензия
+
+Проект создан в образовательных целях.
