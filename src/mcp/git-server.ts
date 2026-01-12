@@ -1,10 +1,101 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+// Вспомогательная функция для выполнения git команд с правильной кодировкой
+async function execGitCommand(
+  command: string | string[],
+  options: { cwd?: string; maxBuffer?: number } = {}
+): Promise<{ stdout: string; stderr: string }> {
+  // Устанавливаем переменные окружения для правильной кодировки на Windows
+  const env = {
+    ...process.env,
+    LANG: "en_US.UTF-8",
+    LC_ALL: "en_US.UTF-8",
+    GIT_PAGER: "cat", // Отключаем пейджер
+  } as NodeJS.ProcessEnv;
+
+  // Для Windows устанавливаем кодировку через переменные окружения
+  if (process.platform === "win32") {
+    (env as any).CHCP = "65001"; // UTF-8
+    // Также устанавливаем для git
+    (env as any).GIT_OPTIONAL_LOCKS = "0";
+  }
+
+  try {
+    let result;
+    
+    // Если команда передана как массив, используем execFile
+    if (Array.isArray(command)) {
+      const [cmd, ...args] = command;
+      result = await execFileAsync(cmd, args, {
+        cwd: options.cwd || process.cwd(),
+        env,
+        encoding: "utf8",
+        maxBuffer: options.maxBuffer || 10 * 1024 * 1024,
+      });
+    } else {
+      // Если команда передана как строка, используем exec
+      result = await execAsync(command, {
+        cwd: options.cwd || process.cwd(),
+        env,
+        encoding: "utf8",
+        maxBuffer: options.maxBuffer || 10 * 1024 * 1024,
+      });
+    }
+
+    return {
+      stdout: result.stdout || "",
+      stderr: result.stderr || "",
+    };
+  } catch (error: any) {
+    // Обрабатываем ошибки с правильной кодировкой
+    const stdout = error?.stdout || "";
+    const stderr = error?.stderr || "";
+    
+    // Если есть stdout, значит команда выполнилась частично успешно
+    if (stdout) {
+      return { stdout, stderr };
+    }
+
+    // Для ошибок git пытаемся извлечь понятное сообщение
+    let errorMessage = "";
+    if (stderr) {
+      // Пытаемся декодировать stderr как UTF-8
+      try {
+        errorMessage = Buffer.from(stderr, "utf8").toString("utf8");
+      } catch {
+        errorMessage = stderr;
+      }
+    } else if (error?.message) {
+      errorMessage = error.message;
+    } else {
+      errorMessage = String(error);
+    }
+
+    // Убираем технические детали из сообщения об ошибке
+    if (errorMessage.includes("Command failed")) {
+      // Извлекаем только основное сообщение об ошибке
+      const lines = errorMessage.split("\n");
+      const gitErrorLine = lines.find((line) => 
+        line.trim() && 
+        !line.includes("Command failed") &&
+        !line.includes("git log") &&
+        !line.includes("git rev-parse")
+      );
+      if (gitErrorLine) {
+        errorMessage = gitErrorLine.trim();
+      }
+    }
+
+    throw new Error(errorMessage || "Ошибка при выполнении git команды");
+  }
+}
 
 // MCP сервер, предоставляющий доступ к Git истории коммитов
 const server = new McpServer({
@@ -83,12 +174,10 @@ server.tool(
         args.push("--", path);
       }
 
-      const command = args.join(" ");
+      console.log(`[MCP git-server] Выполняется команда: git ${args.slice(1).join(" ")}`);
 
-      console.log(`[MCP git-server] Выполняется команда: ${command}`);
-
-      // Выполняем команду git log
-      const { stdout, stderr } = await execAsync(command, {
+      // Выполняем команду git log с массивом аргументов (более безопасно)
+      const { stdout, stderr } = await execGitCommand(args, {
         cwd: process.cwd(),
         maxBuffer: 10 * 1024 * 1024, // 10MB
       });
@@ -144,7 +233,7 @@ server.tool(
       const commitsWithStats = await Promise.all(
         commits.map(async (commit) => {
           try {
-            const { stdout: statStdout } = await execAsync(
+            const { stdout: statStdout } = await execGitCommand(
               `git show --stat --format="" ${commit!.fullHash}`,
               {
                 cwd: process.cwd(),
@@ -265,7 +354,7 @@ server.tool(
       // Получаем текущую ветку
       let currentBranch = "";
       try {
-        const { stdout: currentBranchStdout } = await execAsync("git rev-parse --abbrev-ref HEAD", {
+        const { stdout: currentBranchStdout } = await execGitCommand("git rev-parse --abbrev-ref HEAD", {
           cwd: process.cwd(),
         });
         currentBranch = currentBranchStdout.trim();
@@ -274,7 +363,7 @@ server.tool(
       }
 
       // Получаем локальные ветки
-      const { stdout: localBranchesStdout } = await execAsync("git branch", {
+      const { stdout: localBranchesStdout } = await execGitCommand("git branch", {
         cwd: process.cwd(),
       });
 
@@ -291,7 +380,7 @@ server.tool(
             // Получаем последний коммит для ветки
             let commit = "";
             try {
-              const { stdout: commitStdout } = await execAsync(`git rev-parse --short ${name}`, {
+              const { stdout: commitStdout } = await execGitCommand(`git rev-parse --short ${name}`, {
                 cwd: process.cwd(),
               });
               commit = commitStdout.trim();
@@ -319,7 +408,7 @@ server.tool(
       if (includeRemote) {
         try {
           // Получаем удаленные ветки
-          const { stdout: remoteBranchesStdout } = await execAsync("git branch -r", {
+          const { stdout: remoteBranchesStdout } = await execGitCommand("git branch -r", {
             cwd: process.cwd(),
           });
 
@@ -340,7 +429,7 @@ server.tool(
                 // Получаем последний коммит для удаленной ветки
                 let commit = "";
                 try {
-                  const { stdout: commitStdout } = await execAsync(`git rev-parse --short ${fullName}`, {
+                  const { stdout: commitStdout } = await execGitCommand(`git rev-parse --short ${fullName}`, {
                     cwd: process.cwd(),
                   });
                   commit = commitStdout.trim();
@@ -428,7 +517,7 @@ server.tool(
 
     try {
       // Получаем текущую ветку
-      const { stdout: branchStdout } = await execAsync("git rev-parse --abbrev-ref HEAD", {
+      const { stdout: branchStdout } = await execGitCommand("git rev-parse --abbrev-ref HEAD", {
         cwd: process.cwd(),
       });
 
@@ -441,7 +530,7 @@ server.tool(
       let author = "";
 
       try {
-        const { stdout: logStdout } = await execAsync(
+        const { stdout: logStdout } = await execGitCommand(
           "git log -1 --pretty=format:%H|%s|%ad|%an --date=iso",
           {
             cwd: process.cwd(),
@@ -464,7 +553,7 @@ server.tool(
       let uncommittedFiles: string[] = [];
 
       try {
-        const { stdout: statusStdout } = await execAsync("git status --porcelain", {
+        const { stdout: statusStdout } = await execGitCommand("git status --porcelain", {
           cwd: process.cwd(),
         });
 
@@ -654,7 +743,7 @@ server.tool(
       let trackingBranch = "";
 
       try {
-        const { stdout: branchInfoStdout } = await execAsync(
+        const { stdout: branchInfoStdout } = await execGitCommand(
           `git rev-list --left-right --count ${currentBranch}...@{upstream} 2>&1 || echo "0 0"`,
           {
             cwd: process.cwd(),
@@ -668,7 +757,7 @@ server.tool(
         }
 
         // Получаем имя отслеживаемой ветки
-        const { stdout: trackingStdout } = await execAsync(
+        const { stdout: trackingStdout } = await execGitCommand(
           `git rev-parse --abbrev-ref ${currentBranch}@{upstream} 2>&1 || echo ""`,
           {
             cwd: process.cwd(),
