@@ -1,14 +1,20 @@
 import dotenv from 'dotenv';
 import { join } from 'path';
 
-// Загружаем переменные окружения из корня проекта
-const projectRoot = process.cwd();
-const envPath = join(projectRoot, '.env.local');
+// Проверяем, запущены ли мы в CI окружении (GitHub Actions)
+const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 
-// Пытаемся загрузить .env.local, если не найден - пробуем .env
-dotenv.config({ path: envPath });
-if (!process.env.OPENROUTER_API_KEY) {
+// Загружаем переменные окружения из файла только если не в CI
+// В CI переменные окружения уже должны быть установлены через env секцию
+if (!isCI) {
+  const projectRoot = process.cwd();
+  const envPath = join(projectRoot, '.env.local');
+  
+  // Пытаемся загрузить .env.local, если не найден - пробуем .env
+  dotenv.config({ path: envPath });
+  if (!process.env.OPENROUTER_API_KEY) {
     dotenv.config({ path: join(projectRoot, '.env') });
+  }
 }
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -22,9 +28,10 @@ const EMBEDDING_MODEL = "qwen/qwen3-embedding-8b";
  */
 export async function getEmbedding(text: string): Promise<number[]> {
   if (!OPENROUTER_API_KEY) {
-    throw new Error(
-      "OPENROUTER_API_KEY не найден. Добавьте ключ в .env.local и перезапустите скрипт."
-    );
+    const errorMessage = isCI
+      ? "OPENROUTER_API_KEY не найден в переменных окружения GitHub Actions. Убедитесь, что секрет OPENROUTER_API_KEY добавлен в настройках репозитория: Settings → Secrets and variables → Actions → New repository secret"
+      : "OPENROUTER_API_KEY не найден. Добавьте ключ в .env.local и перезапустите скрипт.";
+    throw new Error(errorMessage);
   }
 
   const response = await fetch(OPENROUTER_EMBEDDINGS_URL, {

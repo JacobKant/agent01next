@@ -233,6 +233,22 @@ async function main() {
   const transport = new StdioServerTransport();
   console.log("[MCP rag-server] Старт, ожидание соединения по stdio...");
   console.log(`[MCP rag-server] Путь к индексу: ${INDEX_PATH}`);
+  
+  // Логируем наличие OPENROUTER_API_KEY для отладки (без вывода самого ключа)
+  const hasApiKey = !!process.env.OPENROUTER_API_KEY;
+  const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+  console.log(`[MCP rag-server] OPENROUTER_API_KEY установлен: ${hasApiKey ? 'да' : 'нет'}`);
+  console.log(`[MCP rag-server] CI окружение: ${isCI ? 'да' : 'нет'}`);
+  
+  if (!hasApiKey) {
+    console.error("[MCP rag-server] ВНИМАНИЕ: OPENROUTER_API_KEY не найден в переменных окружения!");
+    if (isCI) {
+      console.error("[MCP rag-server] Для GitHub Actions добавьте секрет OPENROUTER_API_KEY в настройках репозитория");
+    } else {
+      console.error("[MCP rag-server] Добавьте ключ в .env.local и перезапустите сервер");
+    }
+  }
+  
   await server.connect(transport);
 }
 
