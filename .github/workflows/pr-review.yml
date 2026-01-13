@@ -71,8 +71,75 @@ jobs:
             const reviewOutput = fs.readFileSync('review_output.txt', 'utf8');
             
             // Извлекаем только ревью (без технических логов)
-            const reviewMatch = reviewOutput.match(/РЕЗУЛЬТАТ РЕВЬЮ PR[\s\S]*?={80}/);
-            const reviewText = reviewMatch ? reviewMatch[0] : reviewOutput;
+            // Формат вывода:
+            // ========== (80 символов)
+            // 📝 РЕЗУЛЬТАТ РЕВЬЮ PR
+            // ========== (80 символов)
+            // [текст ревью]
+            // ========== (80 символов)
+            // 📊 Статистика:
+            
+            let reviewText = '';
+            
+            // Ищем начало ревью (может быть с эмодзи или без)
+            let headerIndex = reviewOutput.indexOf('📝 РЕЗУЛЬТАТ РЕВЬЮ PR');
+            if (headerIndex === -1) {
+              headerIndex = reviewOutput.indexOf('РЕЗУЛЬТАТ РЕВЬЮ PR');
+            }
+            
+            if (headerIndex !== -1) {
+              // Ищем следующий разделитель после заголовка (это начало текста ревью)
+              const afterHeader = reviewOutput.substring(headerIndex);
+              const dividerAfterHeader = afterHeader.match(/\n={60,}\n/);
+              
+              if (dividerAfterHeader) {
+                const textStartIndex = headerIndex + dividerAfterHeader.index + dividerAfterHeader[0].length;
+                
+                // Ищем конец ревью - разделитель перед "📊 Статистика:"
+                const statsIndex = reviewOutput.indexOf('📊 Статистика:', textStartIndex);
+                
+                let endIndex = reviewOutput.length;
+                if (statsIndex !== -1) {
+                  // Ищем последний разделитель из = перед "📊 Статистика:"
+                  // Ищем все разделители в диапазоне от textStartIndex до statsIndex
+                  const beforeStats = reviewOutput.substring(textStartIndex, statsIndex);
+                  const dividerPattern = /\n={60,}\n/g;
+                  let lastDividerIndex = -1;
+                  let match;
+                  
+                  while ((match = dividerPattern.exec(beforeStats)) !== null) {
+                    lastDividerIndex = match.index;
+                  }
+                  
+                  if (lastDividerIndex !== -1) {
+                    endIndex = textStartIndex + lastDividerIndex;
+                  } else {
+                    // Если не нашли разделитель, берем до "📊 Статистика:"
+                    endIndex = statsIndex;
+                  }
+                }
+                
+                // Извлекаем текст ревью
+                reviewText = reviewOutput.substring(textStartIndex, endIndex).trim();
+              }
+            }
+            
+            // Логируем для отладки
+            console.log('Длина reviewOutput:', reviewOutput.length);
+            console.log('Найден headerIndex:', headerIndex);
+            console.log('Длина reviewText:', reviewText.length);
+            if (reviewText) {
+              console.log('Первые 300 символов reviewText:', reviewText.substring(0, 300));
+            } else {
+              console.log('⚠️ Ревью текст не найден, показываем весь вывод');
+              console.log('Первые 500 символов reviewOutput:', reviewOutput.substring(0, 500));
+            }
+            
+            // Если текст пустой или слишком короткий, используем весь вывод
+            if (!reviewText || reviewText.length < 50) {
+              console.log('⚠️ Ревью текст слишком короткий, используем весь вывод');
+              reviewText = reviewOutput;
+            }
             
             const prNumber = context.payload.pull_request?.number || context.issue?.number;
             
