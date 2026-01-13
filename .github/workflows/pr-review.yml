@@ -80,13 +80,9 @@ jobs:
               comment => comment.user.type === 'Bot' && comment.body.includes('РЕЗУЛЬТАТ РЕВЬЮ PR')
             );
             
-            const commentBody = `## 🤖 Автоматическое ревью PR
-            
-${reviewText}
-
----
-*Этот комментарий был создан автоматически GitHub Actions.*
-            `;
+            const commentBody = '## 🤖 Автоматическое ревью PR\n\n' +
+              reviewText +
+              '\n\n---\n*Этот комментарий был создан автоматически GitHub Actions.*';
             
             if (botComment) {
               // Обновляем существующий комментарий
