@@ -2,7 +2,7 @@ import { ChatMessage } from "@/types/chat";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OPENROUTER_MODEL = "openai/gpt-oss-20b:free";
+const OPENROUTER_MODEL = "mistralai/devstral-2512:free";
 
 const SYSTEM_PROMPT = `
 Ты AI помощник по разработке проекта agent01next, который находится в директории F:\\PetProjects\\ai_couse\\agent01next.
