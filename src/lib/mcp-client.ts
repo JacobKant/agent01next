@@ -80,9 +80,21 @@ export class McpClientManager {
           continue;
         }
 
+        // Явно передаем переменные окружения в дочерний процесс
+        // Это особенно важно для GitHub Actions, где переменные могут не наследоваться автоматически
+        const env: Record<string, string> = {};
+        
+        // Копируем все переменные окружения, фильтруя undefined
+        for (const [key, value] of Object.entries(process.env)) {
+          if (value !== undefined) {
+            env[key] = value;
+          }
+        }
+        
         const transport = new StdioClientTransport({
           command,
           args,
+          env,
         });
 
         const client = new Client({

@@ -45,11 +45,26 @@ function parseArgs() {
 async function main() {
   const args = parseArgs();
 
+  // Проверяем наличие OPENROUTER_API_KEY
+  const hasApiKey = !!process.env.OPENROUTER_API_KEY;
+  const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+  
+  console.log("🔍 Начинаю ревью PR...");
+  console.log(`🔑 OPENROUTER_API_KEY установлен: ${hasApiKey ? 'да' : 'нет'}`);
+  console.log(`🔧 CI окружение: ${isCI ? 'да' : 'нет'}`);
+  
+  if (!hasApiKey) {
+    const errorMessage = isCI
+      ? "OPENROUTER_API_KEY не найден в переменных окружения GitHub Actions. Убедитесь, что секрет OPENROUTER_API_KEY добавлен в настройках репозитория."
+      : "OPENROUTER_API_KEY не найден. Добавьте ключ в .env.local и перезапустите скрипт.";
+    console.error(`❌ ${errorMessage}`);
+    process.exit(1);
+  }
+
   // Определяем ветки для сравнения
   let baseBranch = args.base || "main";
   let headBranch = args.head || "HEAD";
 
-  console.log("🔍 Начинаю ревью PR...");
   console.log(`📊 Базовая ветка: ${baseBranch}`);
   console.log(`📊 Ветка с изменениями: ${headBranch}`);
 
