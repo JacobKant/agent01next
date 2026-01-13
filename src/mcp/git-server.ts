@@ -839,6 +839,255 @@ server.tool(
   }
 );
 
+// Тул для получения diff между ветками или коммитами
+server.tool(
+  "git_diff",
+  {
+    base: z
+      .string()
+      .optional()
+      .describe("Базовая ветка или коммит для сравнения (по умолчанию 'main' или 'master')"),
+    head: z
+      .string()
+      .optional()
+      .describe("Ветка или коммит с изменениями для сравнения (по умолчанию 'HEAD')"),
+    path: z
+      .string()
+      .optional()
+      .describe("Путь к конкретному файлу или директории для ограничения diff"),
+    unified: z
+      .number()
+      .optional()
+      .describe("Количество строк контекста вокруг изменений (по умолчанию 3)"),
+    stat: z
+      .boolean()
+      .optional()
+      .describe("Показать только статистику изменений (по умолчанию false)"),
+  },
+  async ({ base, head = "HEAD", path, unified = 3, stat = false }) => {
+    console.log("[MCP git-server] Вызван git_diff с параметрами:", {
+      base,
+      head,
+      path,
+      unified,
+      stat,
+    });
+
+    try {
+      // Определяем базовую ветку
+      let baseBranch = base;
+      if (!baseBranch) {
+        // Пытаемся определить основную ветку (main или master)
+        try {
+          const { stdout: mainBranch } = await execGitCommand("git rev-parse --abbrev-ref main", {
+            cwd: process.cwd(),
+          });
+          baseBranch = mainBranch.trim() || "main";
+        } catch {
+          try {
+            const { stdout: masterBranch } = await execGitCommand("git rev-parse --abbrev-ref master", {
+              cwd: process.cwd(),
+            });
+            baseBranch = masterBranch.trim() || "master";
+          } catch {
+            baseBranch = "main";
+          }
+        }
+      }
+
+      // Получаем статистику изменений
+      const statArgs: string[] = [
+        "git",
+        "diff",
+        `--unified=${unified}`,
+        "--stat",
+        `${baseBranch}...${head}`,
+      ];
+
+      if (path) {
+        statArgs.push("--", path);
+      }
+
+      const { stdout: statStdout, stderr: statStderr } = await execGitCommand(statArgs, {
+        cwd: process.cwd(),
+        maxBuffer: 10 * 1024 * 1024, // 10MB
+      });
+
+      if (statStderr && !statStderr.includes("warning:")) {
+        console.warn(`[MCP git-server] Предупреждение при получении статистики: ${statStderr}`);
+      }
+
+      // Если запрошена только статистика
+      if (stat) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  base: baseBranch,
+                  head,
+                  path: path || null,
+                  stat: statStdout,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+
+      // Получаем полный diff
+      const diffArgs: string[] = [
+        "git",
+        "diff",
+        `--unified=${unified}`,
+        `${baseBranch}...${head}`,
+      ];
+
+      if (path) {
+        diffArgs.push("--", path);
+      }
+
+      const { stdout: diffStdout, stderr: diffStderr } = await execGitCommand(diffArgs, {
+        cwd: process.cwd(),
+        maxBuffer: 10 * 1024 * 1024, // 10MB
+      });
+
+      if (diffStderr && !diffStderr.includes("warning:")) {
+        console.warn(`[MCP git-server] Предупреждение при получении diff: ${diffStderr}`);
+      }
+
+      // Получаем список измененных файлов
+      const filesArgs: string[] = [
+        "git",
+        "diff",
+        "--name-status",
+        `${baseBranch}...${head}`,
+      ];
+
+      if (path) {
+        filesArgs.push("--", path);
+      }
+
+      const { stdout: filesStdout } = await execGitCommand(filesArgs, {
+        cwd: process.cwd(),
+      });
+
+      const changedFiles = filesStdout
+        .trim()
+        .split("\n")
+        .filter((line) => line.trim())
+        .map((line) => {
+          const match = line.match(/^([AMD])\s+(.+)$/);
+          if (match) {
+            return {
+              status: match[1], // A=Added, M=Modified, D=Deleted
+              file: match[2],
+            };
+          }
+          return {
+            status: "?",
+            file: line.trim(),
+          };
+        });
+
+      // Получаем информацию о коммитах в диапазоне
+      const { stdout: commitsStdout } = await execGitCommand(
+        `git log --oneline ${baseBranch}..${head}`,
+        {
+          cwd: process.cwd(),
+        }
+      );
+
+      const commits = commitsStdout
+        .trim()
+        .split("\n")
+        .filter((line) => line.trim())
+        .map((line) => {
+          const match = line.match(/^([a-f0-9]+)\s+(.+)$/);
+          if (match) {
+            return {
+              hash: match[1],
+              message: match[2],
+            };
+          }
+          return {
+            hash: line.substring(0, 7),
+            message: line.substring(8),
+          };
+        });
+
+      const result = {
+        base: baseBranch,
+        head,
+        path: path || null,
+        commitsCount: commits.length,
+        commits,
+        filesCount: changedFiles.length,
+        files: changedFiles,
+        stat: statStdout,
+        diff: diffStdout,
+        summary: {
+          added: changedFiles.filter((f) => f.status === "A").length,
+          modified: changedFiles.filter((f) => f.status === "M").length,
+          deleted: changedFiles.filter((f) => f.status === "D").length,
+        },
+      };
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (errorMessage.includes("not a git repository") || errorMessage.includes("Not a git repository")) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  error: "Текущая директория не является git репозиторием",
+                  currentDirectory: process.cwd(),
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+
+      console.error(`[MCP git-server] Ошибка при получении diff:`, error);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                error: `Ошибка при получении diff: ${errorMessage}`,
+                base,
+                head,
+                path: path || null,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  }
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   console.log("[MCP git-server] Старт, ожидание соединения по stdio...");

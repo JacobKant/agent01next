@@ -1,0 +1,115 @@
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Получаем всю историю для git diff
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+      - name: Run PR Review
+        id: review
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Определяем базовую ветку (обычно main или master)
+          BASE_BRANCH="${GITHUB_BASE_REF:-main}"
+          HEAD_BRANCH="HEAD"
+          
+          echo "Base branch: $BASE_BRANCH"
+          echo "Head branch: $HEAD_BRANCH"
+          echo "PR number: ${{ github.event.pull_request.number }}"
+          
+          # Запускаем ревью и сохраняем вывод
+          npm run pr-review -- --base "$BASE_BRANCH" --head "$HEAD_BRANCH" 2>&1 | tee review_output.txt || true
+          
+      - name: Post Review Comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const reviewOutput = fs.readFileSync('review_output.txt', 'utf8');
+            
+            // Извлекаем только ревью (без технических логов)
+            const reviewMatch = reviewOutput.match(/РЕЗУЛЬТАТ РЕВЬЮ PR[\s\S]*?={80}/);
+            const reviewText = reviewMatch ? reviewMatch[0] : reviewOutput;
+            
+            const prNumber = context.payload.pull_request?.number || context.issue?.number;
+            
+            if (!prNumber) {
+              console.log('Не удалось определить номер PR');
+              return;
+            }
+            
+            // Ищем существующий комментарий от бота
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            const botComment = comments.data.find(
+              comment => comment.user.type === 'Bot' && comment.body.includes('РЕЗУЛЬТАТ РЕВЬЮ PR')
+            );
+            
+            const commentBody = '## 🤖 Автоматическое ревью PR\n\n' +
+              reviewText +
+              '\n\n---\n*Этот комментарий был создан автоматически GitHub Actions.*';
+            
+            if (botComment) {
+              // Обновляем существующий комментарий
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody,
+              });
+            } else {
+              // Создаем новый комментарий
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: commentBody,
+              });
+            }
+            
+      - name: Check Review Result
+        if: always()
+        run: |
+          # Проверяем наличие критичных замечаний
+          if grep -q "Критичные\|требуют исправления\|critical" review_output.txt; then
+            echo "⚠️ Обнаружены критичные замечания в PR"
+            exit 1
+          else
+            echo "✅ Ревью завершено успешно"
+            exit 0
+          fi
