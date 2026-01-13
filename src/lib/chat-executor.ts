@@ -33,6 +33,7 @@ export async function executeChatWithMCP(
   let totalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
   const maxIterations = 10; // Защита от бесконечного цикла
   let iterations = 0;
+  // TODO: Добавить логирование количества итераций для отладки
   const executedTools: Array<{
     id: string;
     name: string;
@@ -115,6 +116,7 @@ export async function executeChatWithMCP(
       for (const toolCall of toolCalls) {
         try {
           const toolName = toolCall.function.name;
+          // Парсим аргументы - потенциальная точка отказа при некорректном JSON
           const toolArgs = JSON.parse(toolCall.function.arguments);
 
           const toolResult = await mcpClient.callTool(toolName, toolArgs);

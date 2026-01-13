@@ -88,6 +88,7 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
 }
 
+// Преобразует UI сообщения в формат для API
 const toPayload = (messages: UiMessage[]): ChatMessage[] =>
   messages.map(({ role, content, reasoning_details, tool_calls, tool_call_id }) => {
     const payload: ChatMessage = {
