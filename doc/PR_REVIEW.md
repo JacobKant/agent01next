@@ -1,4 +1,4 @@
-# Автоматическое ревью Pull Request
+f# Автоматическое ревью Pull Request
 
 Система автоматического ревью PR использует AI агента с RAG и MCP инструментами для анализа изменений в Pull Request.
 
@@ -42,12 +42,28 @@ npm run pr-review -- --base main --head HEAD --model "mistralai/devstral-2512:fr
 
 ### Настройка
 
-1. Добавьте секрет `OPENROUTER_API_KEY` в настройках репозитория GitHub:
-   - Settings → Secrets and variables → Actions → New repository secret
+1. **Добавьте секрет `OPENROUTER_API_KEY` в настройках репозитория GitHub:**
+   
+   **Способ 1: Через веб-интерфейс GitHub**
+   - Перейдите в репозиторий на GitHub
+   - Откройте: **Settings** → **Secrets and variables** → **Actions**
+   - Нажмите **New repository secret**
    - Name: `OPENROUTER_API_KEY`
-   - Value: ваш API ключ OpenRouter
+   - Value: ваш API ключ OpenRouter (можно получить на https://openrouter.ai/keys)
+   - Нажмите **Add secret**
+   
+   **Способ 2: Через GitHub CLI**
+   ```bash
+   gh secret set OPENROUTER_API_KEY --repo <owner>/<repo>
+   ```
+   (Вам будет предложено ввести значение ключа)
 
-2. Workflow автоматически:
+2. **Проверка настройки:**
+   - После добавления секрета, он будет доступен в GitHub Actions
+   - При запуске workflow переменная `OPENROUTER_API_KEY` будет автоматически подставлена
+   - Если ключ не установлен, workflow выдаст понятную ошибку с инструкциями
+
+3. **Workflow автоматически:**
    - Получает diff изменений
    - Запускает агента для анализа
    - Создает комментарий в PR с результатами ревью
