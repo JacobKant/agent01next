@@ -313,6 +313,114 @@ server.tool(
   }
 );
 
+// Тул для чтения файла из корня проекта (для ревью PR)
+server.tool(
+  "read_project_file",
+  {
+    filePath: z
+      .string()
+      .describe("Путь к файлу относительно корня проекта (например, 'src/lib/chat-executor.ts')"),
+    encoding: z
+      .enum(["utf8", "utf-8"])
+      .optional()
+      .describe("Кодировка файла (по умолчанию utf8)"),
+  },
+  async ({ filePath, encoding = "utf8" }) => {
+    console.log("[MCP file-server] Вызван read_project_file с filePath=", filePath);
+
+    try {
+      // Разрешаем только файлы внутри корня проекта
+      const projectRoot = process.cwd();
+      const fullPath = resolve(projectRoot, filePath);
+      const relativePath = relative(projectRoot, fullPath);
+
+      // Проверяем что путь не выходит за пределы проекта
+      if (relativePath.startsWith("..") || relativePath.startsWith("/")) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  error: "Путь выходит за пределы проекта",
+                  filePath,
+                  projectRoot,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+
+      // Проверяем что файл существует
+      if (!existsSync(fullPath)) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  error: "Файл не найден",
+                  filePath,
+                  fullPath: relative(projectRoot, fullPath),
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+
+      // Читаем файл
+      const content = await readFile(fullPath, encoding);
+      const stats = await import("fs/promises").then((m) => m.stat(fullPath));
+
+      const result = {
+        success: true,
+        filePath,
+        fullPath: relative(projectRoot, fullPath),
+        content,
+        size: stats.size,
+        encoding,
+        modified: stats.mtime.toISOString(),
+      };
+
+      console.log(`[MCP file-server] Файл проекта прочитан: ${fullPath}`);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[MCP file-server] Ошибка при чтении файла проекта:`, error);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                error: `Ошибка при чтении файла проекта: ${errorMessage}`,
+                filePath,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  }
+);
+
 async function main() {
   // Создаем разрешенную директорию если её нет
   if (!existsSync(ALLOWED_DIRECTORY)) {

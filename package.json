@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "mcp:server": "tsx src/mcp/server.ts"
+    "mcp:server": "tsx src/mcp/server.ts",
+    "pr-review": "tsx src/scripts/pr-review.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",

@@ -173,14 +173,19 @@ export async function callOpenRouter(
   // Валидируем и очищаем сообщения от некорректных tool-сообщений
   const cleanedMessages = validateAndCleanMessages(messages);
 
-  // Добавляем system prompt в начало массива сообщений
-  const messagesWithSystem: ChatMessage[] = [
-    {
-      role: "system",
-      content: SYSTEM_PROMPT,
-    },
-    ...cleanedMessages,
-  ];
+  // Проверяем, есть ли уже системное сообщение в начале массива
+  const hasSystemMessage = cleanedMessages.length > 0 && cleanedMessages[0].role === "system";
+
+  // Добавляем system prompt только если его еще нет
+  const messagesWithSystem: ChatMessage[] = hasSystemMessage
+    ? cleanedMessages
+    : [
+        {
+          role: "system",
+          content: SYSTEM_PROMPT,
+        },
+        ...cleanedMessages,
+      ];
 
   const requestBody: any = {
     model,
