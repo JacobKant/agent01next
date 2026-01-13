@@ -165,9 +165,11 @@ export async function callOpenRouter(
   tools?: OpenRouterTool[]
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
   if (!OPENROUTER_API_KEY) {
-    throw new Error(
-      "OPENROUTER_API_KEY не найден. Добавьте ключ в .env.local и перезапустите dev-сервер."
-    );
+    const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    const errorMessage = isCI
+      ? "OPENROUTER_API_KEY не найден в переменных окружения GitHub Actions. Добавьте секрет OPENROUTER_API_KEY в настройках репозитория: Settings → Secrets and variables → Actions → New repository secret"
+      : "OPENROUTER_API_KEY не найден. Добавьте ключ в .env.local и перезапустите dev-сервер.";
+    throw new Error(errorMessage);
   }
 
   // Валидируем и очищаем сообщения от некорректных tool-сообщений
