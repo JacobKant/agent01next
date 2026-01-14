@@ -50,6 +50,10 @@ export class McpClientManager {
     {
       name: "git-server",
       serverPath: join(process.cwd(), "src", "mcp", "git-server.ts"),
+    },
+    {
+      name: "crm-server",
+      serverPath: join(process.cwd(), "src", "mcp", "crm-server.ts"),
     }
   ];
 
