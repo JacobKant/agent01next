@@ -37,3 +37,6 @@ next-env.d.ts
 
 # database
 /data
+
+# CRM test data
+crm_data.json
