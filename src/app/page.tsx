@@ -29,6 +29,7 @@ type UiMessage = ChatMessage & {
 };
 
 type Provider = "openrouter" | "huggingface";
+type AssistantRole = "default" | "team-assistant";
 
 const initialMessages: UiMessage[] = [];
 
@@ -125,6 +126,7 @@ export default function ChatPage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [chats, setChats] = useState<Array<{ id: string; created_at: number; updated_at: number }>>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [assistantRole, setAssistantRole] = useState<AssistantRole>("default");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Функция для сохранения сообщения в БД
@@ -378,6 +380,7 @@ export default function ChatPage() {
         temperature,
         model,
         provider,
+        assistantRole,
       };
 
       // Добавляем параметр max_tokens/max_new_tokens только если поле заполнено
@@ -612,6 +615,30 @@ export default function ChatPage() {
               disabled={isLoading}
             >
               Hugging Face
+            </button>
+          </div>
+        </div>
+
+        <div className="chat-provider-selector">
+          <label className="provider-label">Роль ассистента:</label>
+          <div className="provider-toggle">
+            <button
+              type="button"
+              className={`provider-button ${assistantRole === "default" ? "active" : ""}`}
+              onClick={() => setAssistantRole("default")}
+              disabled={isLoading}
+              title="Обычный ассистент поддержки"
+            >
+              Поддержка
+            </button>
+            <button
+              type="button"
+              className={`provider-button ${assistantRole === "team-assistant" ? "active" : ""}`}
+              onClick={() => setAssistantRole("team-assistant")}
+              disabled={isLoading}
+              title="Командный ассистент (управление задачами через GitHub Issues)"
+            >
+              Командный
             </button>
           </div>
         </div>

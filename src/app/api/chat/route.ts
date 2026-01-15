@@ -11,6 +11,7 @@ type ChatRequestBody = {
   max_tokens?: number;
   max_new_tokens?: number;
   provider?: "openrouter" | "huggingface";
+  assistantRole?: "default" | "team-assistant";
 };
 
 export async function POST(request: NextRequest) {
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { messages, model, temperature, max_tokens, max_new_tokens, provider = "openrouter" } = body;
+  const { messages, model, temperature, max_tokens, max_new_tokens, provider = "openrouter", assistantRole } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
@@ -69,7 +70,8 @@ export async function POST(request: NextRequest) {
         messagesToSend,
         model,
         temperature ?? 1.0,
-        max_tokens
+        max_tokens,
+        assistantRole
       );
       
       result = {

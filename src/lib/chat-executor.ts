@@ -1,6 +1,7 @@
 import { callOpenRouter, TokenUsage } from "./openrouter";
 import { ChatMessage } from "@/types/chat";
 import { McpClientManager } from "./mcp-client";
+import { AssistantRole } from "./system-prompts";
 
 export type ChatExecutionResult = {
   message: ChatMessage;
@@ -26,7 +27,8 @@ export async function executeChatWithMCP(
   messages: ChatMessage[],
   model?: string,
   temperature: number = 1.0,
-  max_tokens?: number
+  max_tokens?: number,
+  assistantRole?: AssistantRole
 ): Promise<ChatExecutionResult> {
   let messagesToSend = messages;
   const conversationMessages: ChatMessage[] = [...messagesToSend];
@@ -64,7 +66,8 @@ export async function executeChatWithMCP(
         model,
         temperature,
         max_tokens,
-        tools.length > 0 ? tools : undefined
+        tools.length > 0 ? tools : undefined,
+        assistantRole
       );
 
       // Обновляем общее использование токенов
