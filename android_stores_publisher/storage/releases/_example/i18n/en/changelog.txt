@@ -1,0 +1,3 @@
+Add example release structure.
+Add sample i18n texts and placeholder directories.
+

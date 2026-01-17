@@ -1,0 +1,6 @@
+Это тестовый релиз, который показывает формат файлов в `storage/releases/<versionCode>/`.
+
+- Заголовок/описание/чейнджлог лежат в `i18n/<lang>/`.
+- Артефакты (.apk/.aab) кладите в `artifacts/`.
+- Скриншоты — в `media/screenshots/<deviceType>/`.
+

@@ -1,0 +1,26 @@
+schemaVersion: 1
+
+# Identity (обязательное)
+versionCode: 100000
+versionName: 1.0.0-example
+packageName: com.example.appdeployer.demo
+
+# Lifecycle
+status: draft
+createdAt: "2026-01-17T00:00:00.000Z"
+updatedAt: "2026-01-17T00:00:00.000Z"
+
+# Stores (опционально)
+stores:
+  rustore:
+    enabled: false
+    # appId можно хранить здесь или в переменной окружения RUSTORE_APP_ID
+    # appId: "your-rustore-app-id"
+  huawei:
+    enabled: false
+
+# UI/automation
+tags:
+  - example
+  - demo
+

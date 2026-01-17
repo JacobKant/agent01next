@@ -1,0 +1,21 @@
+node_modules
+.next
+dist
+build
+out
+
+.DS_Store
+
+.env
+.env.local
+.env.*.local
+
+# Storage snapshot
+storage/**
+!storage/.gitkeep
+
+# Keep an example release in git (docs / onboarding)
+!storage/releases/
+!storage/releases/_example/
+!storage/releases/_example/**
+

@@ -1,0 +1,6 @@
+This is a sample release showing the expected folder/file format under `storage/releases/<versionCode>/`.
+
+- Localized texts are in `i18n/<lang>/`.
+- Artifacts (.apk/.aab) go to `artifacts/`.
+- Screenshots go to `media/screenshots/<deviceType>/`.
+
