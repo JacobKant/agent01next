@@ -28,7 +28,7 @@ type UiMessage = ChatMessage & {
   }>;
 };
 
-type Provider = "openrouter" | "huggingface";
+type Provider = "openrouter" | "huggingface" | "custom";
 type AssistantRole = "default" | "team-assistant";
 
 const initialMessages: UiMessage[] = [];
@@ -127,6 +127,8 @@ export default function ChatPage() {
   const [chats, setChats] = useState<Array<{ id: string; created_at: number; updated_at: number }>>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [assistantRole, setAssistantRole] = useState<AssistantRole>("default");
+  const [customBaseUrl, setCustomBaseUrl] = useState<string>("");
+  const [customModel, setCustomModel] = useState<string>("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Функция для сохранения сообщения в БД
@@ -378,10 +380,15 @@ export default function ChatPage() {
       const requestBody: any = {
         messages: toPayload(optimisticMessages),
         temperature,
-        model,
+        model: provider === "custom" && customModel ? customModel : model,
         provider,
         assistantRole,
       };
+
+      // Добавляем кастомный базовый URL если указан
+      if (provider === "custom" && customBaseUrl.trim()) {
+        requestBody.baseUrl = customBaseUrl.trim();
+      }
 
       // Добавляем параметр max_tokens/max_new_tokens только если поле заполнено
       if (maxTokens.trim()) {
@@ -616,8 +623,49 @@ export default function ChatPage() {
             >
               Hugging Face
             </button>
+            <button
+              type="button"
+              className={`provider-button ${provider === "custom" ? "active" : ""}`}
+              onClick={() => setProvider("custom")}
+              disabled={isLoading}
+            >
+              Кастомный API
+            </button>
           </div>
         </div>
+
+        {provider === "custom" && (
+          <>
+            <div className="chat-model-selector">
+              <label htmlFor="custom-base-url" className="model-label">
+                Базовый URL API:
+              </label>
+              <input
+                id="custom-base-url"
+                type="text"
+                className="model-select"
+                value={customBaseUrl}
+                onChange={(e) => setCustomBaseUrl(e.target.value)}
+                disabled={isLoading}
+                placeholder="http://localhost:1234/v1/chat/completions"
+              />
+            </div>
+            <div className="chat-model-selector">
+              <label htmlFor="custom-model" className="model-label">
+                Model Identifier:
+              </label>
+              <input
+                id="custom-model"
+                type="text"
+                className="model-select"
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                disabled={isLoading}
+                placeholder="gpt-3.5-turbo или другой идентификатор модели"
+              />
+            </div>
+          </>
+        )}
 
         <div className="chat-provider-selector">
           <label className="provider-label">Роль ассистента:</label>
@@ -643,26 +691,28 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="chat-model-selector">
-          <label htmlFor="model-select" className="model-label">
-            Модель:
-          </label>
-          <select
-            id="model-select"
-            className="model-select"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            disabled={isLoading}
-          >
-            {(provider === "openrouter" ? OPENROUTER_MODELS : HUGGINGFACE_MODELS).map(
-              (modelOption) => (
-                <option key={modelOption} value={modelOption}>
-                  {modelOption}
-                </option>
-              )
-            )}
-          </select>
-        </div>
+        {provider !== "custom" && (
+          <div className="chat-model-selector">
+            <label htmlFor="model-select" className="model-label">
+              Модель:
+            </label>
+            <select
+              id="model-select"
+              className="model-select"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={isLoading}
+            >
+              {(provider === "openrouter" ? OPENROUTER_MODELS : HUGGINGFACE_MODELS).map(
+                (modelOption) => (
+                  <option key={modelOption} value={modelOption}>
+                    {modelOption}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+        )}
 
         <div className="chat-messages">
           {isLoadingHistory && (

@@ -28,9 +28,11 @@ export async function callHuggingFace(
   messages: ChatMessage[],
   model: string,
   temperature: number = 1.0,
-  max_new_tokens?: number
+  max_new_tokens?: number,
+  baseUrl?: string
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
-  if (!HF_API_KEY) {
+  // Для кастомного API ключ может не требоваться
+  if (!baseUrl && !HF_API_KEY) {
     throw new Error(
       "HF_TOKEN не найден. Добавьте ключ в .env.local и перезапустите dev-сервер."
     );
@@ -48,12 +50,23 @@ export async function callHuggingFace(
 
   console.log("HuggingFace Request JSON:", JSON.stringify(requestBody, null, 2));
 
-  const response = await fetch(HF_BASE_URL, {
+  // Используем кастомный baseUrl если передан, иначе дефолтный
+  const apiBaseUrl = baseUrl || HF_BASE_URL;
+  const apiKey = baseUrl ? (process.env.CUSTOM_API_KEY || HF_API_KEY) : HF_API_KEY;
+
+  // Формируем заголовки
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Добавляем Authorization только если есть ключ
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(apiBaseUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${HF_API_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(requestBody),
   });
 

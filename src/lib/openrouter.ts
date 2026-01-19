@@ -83,9 +83,11 @@ export async function callOpenRouter(
   temperature: number = 1.0,
   max_tokens?: number,
   tools?: OpenRouterTool[],
-  assistantRole?: AssistantRole
+  assistantRole?: AssistantRole,
+  baseUrl?: string
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
-  if (!OPENROUTER_API_KEY) {
+  // Для кастомного API ключ может не требоваться
+  if (!baseUrl && !OPENROUTER_API_KEY) {
     const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
     const errorMessage = isCI
       ? "OPENROUTER_API_KEY не найден в переменных окружения GitHub Actions. Добавьте секрет OPENROUTER_API_KEY в настройках репозитория: Settings → Secrets and variables → Actions → New repository secret"
@@ -148,15 +150,31 @@ export async function callOpenRouter(
   
   console.log("OpenRouter Request:", JSON.stringify(logBody, null, 2));
 
-  const response = await fetch(OPENROUTER_BASE_URL, {
+  // Используем кастомный baseUrl если передан, иначе дефолтный
+  const apiBaseUrl = baseUrl || OPENROUTER_BASE_URL;
+  
+  // Для кастомного API ключ может не требоваться
+  const apiKey = baseUrl ? (process.env.CUSTOM_API_KEY || OPENROUTER_API_KEY) : OPENROUTER_API_KEY;
+
+  // Формируем заголовки
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Добавляем Authorization только если есть ключ
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  // Для OpenRouter добавляем дополнительные заголовки
+  if (!baseUrl) {
+    headers["HTTP-Referer"] = process.env.OPENROUTER_HTTP_REFERER ?? "http://localhost:3000";
+    headers["X-Title"] = process.env.OPENROUTER_APP_NAME ?? "Agent01 Chat";
+  }
+
+  const response = await fetch(apiBaseUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer":
-        process.env.OPENROUTER_HTTP_REFERER ?? "http://localhost:3000",
-      "X-Title": process.env.OPENROUTER_APP_NAME ?? "Agent01 Chat",
-    },
+    headers,
     body: JSON.stringify(requestBody),
   });
 

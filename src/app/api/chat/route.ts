@@ -10,8 +10,9 @@ type ChatRequestBody = {
   temperature?: number;
   max_tokens?: number;
   max_new_tokens?: number;
-  provider?: "openrouter" | "huggingface";
+  provider?: "openrouter" | "huggingface" | "custom";
   assistantRole?: "default" | "team-assistant";
+  baseUrl?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { messages, model, temperature, max_tokens, max_new_tokens, provider = "openrouter", assistantRole } = body;
+  const { messages, model, temperature, max_tokens, max_new_tokens, provider = "openrouter", assistantRole, baseUrl } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
@@ -62,8 +63,32 @@ export async function POST(request: NextRequest) {
         messagesToSend,
         model!,
         temperature ?? 1.0,
-        max_new_tokens
+        max_new_tokens,
+        baseUrl
       );
+    } else if (provider === "custom") {
+      // Кастомный API с поддержкой MCP инструментов через общую функцию
+      if (!baseUrl || !model) {
+        return NextResponse.json(
+          { error: "Для кастомного провайдера обязательны поля baseUrl и model" },
+          { status: 400 }
+        );
+      }
+      const executionResult = await executeChatWithMCP(
+        messagesToSend,
+        model,
+        temperature ?? 1.0,
+        max_tokens,
+        assistantRole,
+        baseUrl
+      );
+      
+      result = {
+        message: executionResult.message,
+        usage: executionResult.usage,
+      };
+      executedTools = executionResult.executedTools || [];
+      intermediateMessages = executionResult.intermediateMessages || [];
     } else {
       // OpenRouter с поддержкой MCP инструментов через общую функцию
       const executionResult = await executeChatWithMCP(
