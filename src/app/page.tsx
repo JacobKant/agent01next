@@ -129,6 +129,8 @@ export default function ChatPage() {
   const [assistantRole, setAssistantRole] = useState<AssistantRole>("default");
   const [customBaseUrl, setCustomBaseUrl] = useState<string>("");
   const [customModel, setCustomModel] = useState<string>("");
+  const [customSystemPrompt, setCustomSystemPrompt] = useState<string>("");
+  const [useCustomPrompt, setUseCustomPrompt] = useState<boolean>(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Функция для сохранения сообщения в БД
@@ -384,6 +386,11 @@ export default function ChatPage() {
         provider,
         assistantRole,
       };
+
+      // Добавляем кастомный системный промпт если он включен и заполнен
+      if (useCustomPrompt && customSystemPrompt.trim()) {
+        requestBody.customSystemPrompt = customSystemPrompt.trim();
+      }
 
       // Добавляем кастомный базовый URL если указан
       if (provider === "custom" && customBaseUrl.trim()) {
@@ -672,8 +679,11 @@ export default function ChatPage() {
           <div className="provider-toggle">
             <button
               type="button"
-              className={`provider-button ${assistantRole === "default" ? "active" : ""}`}
-              onClick={() => setAssistantRole("default")}
+              className={`provider-button ${assistantRole === "default" && !useCustomPrompt ? "active" : ""}`}
+              onClick={() => {
+                setAssistantRole("default");
+                setUseCustomPrompt(false);
+              }}
               disabled={isLoading}
               title="Обычный ассистент поддержки"
             >
@@ -681,15 +691,45 @@ export default function ChatPage() {
             </button>
             <button
               type="button"
-              className={`provider-button ${assistantRole === "team-assistant" ? "active" : ""}`}
-              onClick={() => setAssistantRole("team-assistant")}
+              className={`provider-button ${assistantRole === "team-assistant" && !useCustomPrompt ? "active" : ""}`}
+              onClick={() => {
+                setAssistantRole("team-assistant");
+                setUseCustomPrompt(false);
+              }}
               disabled={isLoading}
               title="Командный ассистент (управление задачами через GitHub Issues)"
             >
               Командный
             </button>
+            <button
+              type="button"
+              className={`provider-button ${useCustomPrompt ? "active" : ""}`}
+              onClick={() => setUseCustomPrompt(true)}
+              disabled={isLoading}
+              title="Свой системный промпт"
+            >
+              Свой промпт
+            </button>
           </div>
         </div>
+
+        {useCustomPrompt && (
+          <div className="chat-model-selector">
+            <label htmlFor="custom-system-prompt" className="model-label">
+              Системный промпт:
+            </label>
+            <textarea
+              id="custom-system-prompt"
+              className="model-select"
+              value={customSystemPrompt}
+              onChange={(e) => setCustomSystemPrompt(e.target.value)}
+              disabled={isLoading}
+              placeholder="Введите свой системный промпт..."
+              rows={6}
+              style={{ resize: "vertical", minHeight: "120px" }}
+            />
+          </div>
+        )}
 
         {provider !== "custom" && (
           <div className="chat-model-selector">

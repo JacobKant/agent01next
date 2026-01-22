@@ -84,7 +84,8 @@ export async function callOpenRouter(
   max_tokens?: number,
   tools?: OpenRouterTool[],
   assistantRole?: AssistantRole,
-  baseUrl?: string
+  baseUrl?: string,
+  customSystemPrompt?: string
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
   // Для кастомного API ключ может не требоваться
   if (!baseUrl && !OPENROUTER_API_KEY) {
@@ -101,8 +102,8 @@ export async function callOpenRouter(
   // Проверяем, есть ли уже системное сообщение в начале массива
   const hasSystemMessage = cleanedMessages.length > 0 && cleanedMessages[0].role === "system";
 
-  // Получаем системный промпт для указанной роли
-  const systemPrompt = getSystemPrompt(assistantRole || "default");
+  // Получаем системный промпт для указанной роли (с поддержкой кастомного промпта)
+  const systemPrompt = getSystemPrompt(assistantRole || "default", customSystemPrompt);
 
   // Добавляем system prompt только если его еще нет
   const messagesWithSystem: ChatMessage[] = hasSystemMessage
@@ -119,8 +120,15 @@ export async function callOpenRouter(
     model,
     messages: messagesWithSystem,
     temperature,
-    reasoning: { enabled: true },
   };
+
+  // Параметр reasoning поддерживается только OpenRouter, не добавляем для кастомного API
+  if (!baseUrl) {
+    requestBody.reasoning = { enabled: true };
+  } else {
+    // Для кастомного API (Ollama) отключаем streaming для получения полного ответа
+    requestBody.stream = false;
+  }
 
   if (max_tokens !== undefined) {
     requestBody.max_tokens = max_tokens;
@@ -185,14 +193,123 @@ export async function callOpenRouter(
     );
   }
 
-  const result = (await response.json()) as OpenRouterResponse;
+  // Получаем текст ответа для обработки потоковых и нестандартных форматов
+  const responseText = await response.text();
+  
+  // Логируем первые 500 символов ответа для отладки
+  console.log("API Response (first 500 chars):", responseText.substring(0, 500));
+  
+  let result: OpenRouterResponse;
+  
+  try {
+    // Пытаемся распарсить как один JSON объект
+    result = JSON.parse(responseText) as OpenRouterResponse;
+  } catch (parseError) {
+    // Если не получилось, возможно это потоковый ответ (несколько JSON объектов)
+    // Ollama может возвращать несколько JSON объектов, разделенных переносами строк
+    const lines = responseText.trim().split('\n').filter(line => line.trim());
+    
+    if (lines.length === 0) {
+      throw new Error(`Пустой ответ от API: ${responseText}`);
+    }
+    
+    // Если это потоковый ответ Ollama, собираем все части content
+    const ollamaStreamChunks: Array<{ message?: { content?: string }; done?: boolean }> = [];
+    let lastValidJson: OpenRouterResponse | null = null;
+    let parseErrors: string[] = [];
+    
+    // Парсим все строки и собираем части сообщения
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        const parsed = JSON.parse(lines[i]) as any;
+        
+        // Проверяем, это формат Ollama (с полем message и model)
+        if (parsed.model && parsed.message) {
+          ollamaStreamChunks.push(parsed);
+          // Если это финальный чанк с done: true, сохраняем его как последний
+          if (parsed.done === true) {
+            lastValidJson = parsed as OpenRouterResponse;
+          }
+        } else if (parsed.choices || parsed.message || parsed.model) {
+          // Другой формат ответа
+          lastValidJson = parsed as OpenRouterResponse;
+        }
+      } catch (e) {
+        parseErrors.push(`Строка ${i}: ${e instanceof Error ? e.message : String(e)}`);
+        continue;
+      }
+    }
+    
+    // Если нашли потоковые чанки Ollama, собираем полное сообщение
+    if (ollamaStreamChunks.length > 0) {
+      // Собираем все части content из всех чанков
+      const fullContent = ollamaStreamChunks
+        .map(chunk => chunk.message?.content || '')
+        .join('');
+      
+      // Используем последний чанк как основу, но заменяем content на собранный
+      const baseChunk = lastValidJson || ollamaStreamChunks[ollamaStreamChunks.length - 1];
+      result = {
+        ...baseChunk,
+        message: {
+          ...(baseChunk as any).message,
+          content: fullContent,
+        },
+      } as OpenRouterResponse;
+    } else if (!lastValidJson) {
+      // Если не нашли валидный JSON, пробуем объединить все строки
+      try {
+        // Удаляем лишние символы и пробуем распарсить как один объект
+        const cleaned = responseText.trim().replace(/\}\s*\{/g, '}\n{');
+        const firstJsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (firstJsonMatch) {
+          result = JSON.parse(firstJsonMatch[0]) as OpenRouterResponse;
+        } else {
+          throw new Error(`Не удалось распарсить ответ. Ошибки: ${parseErrors.join('; ')}. Ответ: ${responseText.substring(0, 500)}`);
+        }
+      } catch (finalError) {
+        throw new Error(`Не удалось распарсить ответ от API. Ошибки: ${parseErrors.join('; ')}. Первые 500 символов ответа: ${responseText.substring(0, 500)}`);
+      }
+    } else {
+      result = lastValidJson;
+    }
+  }
   
   console.log("OpenRouter Response JSON:", JSON.stringify(result, null, 2));
 
-  const message = result.choices?.[0]?.message;
+  // Ollama может возвращать ответ в другом формате, проверяем оба варианта
+  let message: ChatMessage | undefined;
+  
+  if (result.choices?.[0]?.message) {
+    // Стандартный формат OpenRouter
+    message = result.choices[0].message;
+  } else if ((result as any).message) {
+    // Формат Ollama (прямое поле message)
+    const ollamaMessage = (result as any).message;
+    // Ollama возвращает message как объект с role и content
+    if (typeof ollamaMessage === 'object' && ollamaMessage.content !== undefined) {
+      message = {
+        role: ollamaMessage.role || "assistant",
+        content: ollamaMessage.content,
+        tool_calls: ollamaMessage.tool_calls,
+      };
+    } else {
+      // Если message это просто строка
+      message = {
+        role: "assistant",
+        content: typeof ollamaMessage === 'string' ? ollamaMessage : String(ollamaMessage),
+      };
+    }
+  } else if ((result as any).response) {
+    // Альтернативный формат Ollama
+    message = {
+      role: "assistant",
+      content: (result as any).response,
+    };
+  }
 
   if (!message) {
-    throw new Error("OpenRouter не вернул сообщение");
+    throw new Error(`API не вернул сообщение. Структура ответа: ${JSON.stringify(result, null, 2).substring(0, 500)}`);
   }
 
   const usage: TokenUsage | undefined = result.usage

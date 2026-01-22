@@ -13,6 +13,7 @@ type ChatRequestBody = {
   provider?: "openrouter" | "huggingface" | "custom";
   assistantRole?: "default" | "team-assistant";
   baseUrl?: string;
+  customSystemPrompt?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { messages, model, temperature, max_tokens, max_new_tokens, provider = "openrouter", assistantRole, baseUrl } = body;
+  const { messages, model, temperature, max_tokens, max_new_tokens, provider = "openrouter", assistantRole, baseUrl, customSystemPrompt } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
@@ -64,7 +65,9 @@ export async function POST(request: NextRequest) {
         model!,
         temperature ?? 1.0,
         max_new_tokens,
-        baseUrl
+        baseUrl,
+        assistantRole,
+        body.customSystemPrompt
       );
     } else if (provider === "custom") {
       // Кастомный API с поддержкой MCP инструментов через общую функцию
@@ -80,7 +83,8 @@ export async function POST(request: NextRequest) {
         temperature ?? 1.0,
         max_tokens,
         assistantRole,
-        baseUrl
+        baseUrl,
+        customSystemPrompt
       );
       
       result = {
@@ -96,7 +100,9 @@ export async function POST(request: NextRequest) {
         model,
         temperature ?? 1.0,
         max_tokens,
-        assistantRole
+        assistantRole,
+        undefined,
+        customSystemPrompt
       );
       
       result = {

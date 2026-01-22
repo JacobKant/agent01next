@@ -1,4 +1,5 @@
 import { ChatMessage } from "@/types/chat";
+import { getSystemPrompt, AssistantRole } from "./system-prompts";
 
 const HF_API_KEY = process.env.HF_TOKEN;
 const HF_BASE_URL = "https://router.huggingface.co/v1/chat/completions";
@@ -29,7 +30,9 @@ export async function callHuggingFace(
   model: string,
   temperature: number = 1.0,
   max_new_tokens?: number,
-  baseUrl?: string
+  baseUrl?: string,
+  assistantRole?: AssistantRole,
+  customSystemPrompt?: string
 ): Promise<{ message: ChatMessage; usage?: TokenUsage }> {
   // Для кастомного API ключ может не требоваться
   if (!baseUrl && !HF_API_KEY) {
@@ -38,9 +41,26 @@ export async function callHuggingFace(
     );
   }
 
+  // Проверяем, есть ли уже системное сообщение в начале массива
+  const hasSystemMessage = messages.length > 0 && messages[0].role === "system";
+
+  // Получаем системный промпт для указанной роли (с поддержкой кастомного промпта)
+  const systemPrompt = getSystemPrompt(assistantRole || "default", customSystemPrompt);
+
+  // Добавляем system prompt только если его еще нет
+  const messagesWithSystem: ChatMessage[] = hasSystemMessage
+    ? messages
+    : [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        ...messages,
+      ];
+
   const requestBody: any = {
     model,
-    messages,
+    messages: messagesWithSystem,
     temperature,
   };
 

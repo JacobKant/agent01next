@@ -29,7 +29,8 @@ export async function executeChatWithMCP(
   temperature: number = 1.0,
   max_tokens?: number,
   assistantRole?: AssistantRole,
-  baseUrl?: string
+  baseUrl?: string,
+  customSystemPrompt?: string
 ): Promise<ChatExecutionResult> {
   let messagesToSend = messages;
   const conversationMessages: ChatMessage[] = [...messagesToSend];
@@ -69,7 +70,8 @@ export async function executeChatWithMCP(
         max_tokens,
         tools.length > 0 ? tools : undefined,
         assistantRole,
-        baseUrl
+        baseUrl,
+        customSystemPrompt
       );
 
       // Обновляем общее использование токенов
