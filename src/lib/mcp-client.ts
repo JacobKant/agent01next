@@ -58,7 +58,11 @@ export class McpClientManager {
     // {
     //   name: "github-issues-server",
     //   serverPath: join(process.cwd(), "src", "mcp", "github-issues-server.ts"),
-    // }
+    // },
+    {
+      name: "data-analyst-server",
+      serverPath: join(process.cwd(), "src", "mcp", "data-analyst-server.ts"),
+    }
   ];
 
   async connect(): Promise<OpenAITool[]> {

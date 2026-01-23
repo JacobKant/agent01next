@@ -29,7 +29,7 @@ type UiMessage = ChatMessage & {
 };
 
 type Provider = "openrouter" | "huggingface" | "custom";
-type AssistantRole = "default" | "team-assistant";
+type AssistantRole = "default" | "team-assistant" | "data-analyst";
 
 const initialMessages: UiMessage[] = [];
 
@@ -131,6 +131,8 @@ export default function ChatPage() {
   const [customModel, setCustomModel] = useState<string>("");
   const [customSystemPrompt, setCustomSystemPrompt] = useState<string>("");
   const [useCustomPrompt, setUseCustomPrompt] = useState<boolean>(false);
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ fileName: string; filePath: string }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Функция для сохранения сообщения в БД
@@ -307,9 +309,58 @@ export default function ChatPage() {
     loadHistory();
   }, [chatId]);
 
+  // Загрузка списка загруженных файлов
+  const loadUploadedFiles = async () => {
+    try {
+      const response = await fetch("/api/data/files");
+      if (response.ok) {
+        const data = await response.json();
+        setUploadedFiles(data.files || []);
+      }
+    } catch (error) {
+      console.error("Ошибка при загрузке списка файлов:", error);
+    }
+  };
+
+  // Загрузка файла
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/data/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        await loadUploadedFiles();
+        alert(`Файл ${data.fileName} успешно загружен!`);
+      } else {
+        const error = await response.json();
+        alert(`Ошибка загрузки: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Ошибка при загрузке файла:", error);
+      alert("Ошибка при загрузке файла");
+    } finally {
+      setIsUploading(false);
+      // Сбрасываем значение input, чтобы можно было загрузить тот же файл снова
+      event.target.value = "";
+    }
+  };
+
   // Загрузка списка чатов при монтировании
   useEffect(() => {
     loadChats();
+    if (assistantRole === "data-analyst") {
+      loadUploadedFiles();
+    }
   }, []);
 
   // Обновление списка чатов после сохранения сообщения
@@ -318,6 +369,13 @@ export default function ChatPage() {
       loadChats();
     }
   }, [messages.length]);
+
+  // Обновление списка файлов при смене роли на data-analyst
+  useEffect(() => {
+    if (assistantRole === "data-analyst") {
+      loadUploadedFiles();
+    }
+  }, [assistantRole]);
 
   // Обновляем модель при смене провайдера
   useEffect(() => {
@@ -703,6 +761,18 @@ export default function ChatPage() {
             </button>
             <button
               type="button"
+              className={`provider-button ${assistantRole === "data-analyst" && !useCustomPrompt ? "active" : ""}`}
+              onClick={() => {
+                setAssistantRole("data-analyst");
+                setUseCustomPrompt(false);
+              }}
+              disabled={isLoading}
+              title="Локальный аналитик данных (анализ CSV, JSON, логов)"
+            >
+              Аналитик
+            </button>
+            <button
+              type="button"
               className={`provider-button ${useCustomPrompt ? "active" : ""}`}
               onClick={() => setUseCustomPrompt(true)}
               disabled={isLoading}
@@ -728,6 +798,35 @@ export default function ChatPage() {
               rows={6}
               style={{ resize: "vertical", minHeight: "120px" }}
             />
+          </div>
+        )}
+
+        {assistantRole === "data-analyst" && (
+          <div className="chat-model-selector">
+            <label htmlFor="file-upload" className="model-label">
+              Загрузка данных (CSV, JSON, LOG, TXT):
+            </label>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <input
+                id="file-upload"
+                type="file"
+                accept=".csv,.json,.log,.txt"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+                style={{ flex: 1 }}
+              />
+              {isUploading && <span>Загрузка...</span>}
+            </div>
+            {uploadedFiles.length > 0 && (
+              <div style={{ marginTop: "10px", fontSize: "0.9em", color: "#666" }}>
+                <strong>Загружено файлов: {uploadedFiles.length}</strong>
+                <ul style={{ marginTop: "5px", paddingLeft: "20px" }}>
+                  {uploadedFiles.map((file, index) => (
+                    <li key={index}>{file.fileName}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
