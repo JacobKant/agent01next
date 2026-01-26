@@ -11,7 +11,7 @@ type ChatRequestBody = {
   max_tokens?: number;
   max_new_tokens?: number;
   provider?: "openrouter" | "huggingface" | "custom";
-  assistantRole?: "default" | "team-assistant";
+  assistantRole?: "default" | "team-assistant" | "data-analyst" | "personal-assistant";
   baseUrl?: string;
   customSystemPrompt?: string;
 };

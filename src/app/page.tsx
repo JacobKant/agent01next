@@ -29,7 +29,7 @@ type UiMessage = ChatMessage & {
 };
 
 type Provider = "openrouter" | "huggingface" | "custom";
-type AssistantRole = "default" | "team-assistant" | "data-analyst";
+type AssistantRole = "default" | "team-assistant" | "data-analyst" | "personal-assistant";
 
 const initialMessages: UiMessage[] = [];
 
@@ -770,6 +770,18 @@ export default function ChatPage() {
               title="Локальный аналитик данных (анализ CSV, JSON, логов)"
             >
               Аналитик
+            </button>
+            <button
+              type="button"
+              className={`provider-button ${assistantRole === "personal-assistant" && !useCustomPrompt ? "active" : ""}`}
+              onClick={() => {
+                setAssistantRole("personal-assistant");
+                setUseCustomPrompt(false);
+              }}
+              disabled={isLoading}
+              title="Персональный ассистент (помощь в работе, здоровье, развитии)"
+            >
+              Личный
             </button>
             <button
               type="button"

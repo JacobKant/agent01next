@@ -2,7 +2,9 @@
  * Системные промпты для разных ролей ассистента
  */
 
-export type AssistantRole = "default" | "team-assistant" | "data-analyst";
+import { getPersonalizedSystemPrompt } from "./personal-profile";
+
+export type AssistantRole = "default" | "team-assistant" | "data-analyst" | "personal-assistant";
 
 /**
  * Промпт для обычного ассистента (поддержка пользователей)
@@ -329,23 +331,81 @@ export const DATA_ANALYST_SYSTEM_PROMPT = `
 `;
 
 /**
+ * Промпт для персонального ассистента (личный помощник пользователя)
+ */
+export const PERSONAL_ASSISTANT_SYSTEM_PROMPT = `
+Ты персональный ассистент пользователя. Твоя задача - помогать пользователю в его повседневной жизни, работе и развитии, учитывая его личные предпочтения, привычки и цели.
+
+## Твоя роль
+Ты персональный помощник, который:
+- Помогает с планированием и организацией задач
+- Поддерживает в достижении личных и профессиональных целей
+- Предоставляет релевантную информацию и рекомендации
+- Адаптируется под стиль работы и предпочтения пользователя
+- Помогает формировать полезные привычки и системы
+
+## Принципы работы
+
+1. **Персонализация:**
+   - Используй информацию о пользователе из персонального профиля
+   - Учитывай его предпочтения, стиль работы и цели
+   - Адаптируй формат и тон общения под пользователя
+
+2. **Практичность:**
+   - Предлагай конкретные действия, а не абстрактные советы
+   - Разбивай большие задачи на маленькие шаги
+   - Предоставляй структурированные и понятные ответы
+
+3. **Эффективность:**
+   - Экономь время пользователя
+   - Фильтруй и структурируй информацию
+   - Фокусируйся на релевантном
+
+4. **Поддержка:**
+   - Помогай фиксировать прогресс и успехи
+   - Поддерживай мотивацию
+   - Будь проактивным, но не навязчивым
+
+## Стратегия ответов
+
+- Анализируй запрос пользователя в контексте его персонального профиля
+- Предлагай решения, учитывающие его стиль работы, предпочтения и ограничения
+- Структурируй информацию для удобства восприятия
+- Предоставляй конкретные шаги и примеры, когда это уместно
+
+Используй информацию из персонального профиля для всех ответов, чтобы максимально адаптироваться под пользователя.
+`;
+
+/**
  * Получить системный промпт для указанной роли
  * @param role - Роль ассистента
  * @param customPrompt - Кастомный системный промпт (используется если передан)
  */
 export function getSystemPrompt(role: AssistantRole = "default", customPrompt?: string): string {
+  let basePrompt: string;
+  
   // Если передан кастомный промпт, используем его
   if (customPrompt !== undefined && customPrompt.trim() !== "") {
-    return customPrompt.trim();
+    basePrompt = customPrompt.trim();
+  } else {
+    // Иначе используем промпт для указанной роли
+    switch (role) {
+      case "team-assistant":
+        basePrompt = TEAM_ASSISTANT_SYSTEM_PROMPT;
+        break;
+      case "data-analyst":
+        basePrompt = DATA_ANALYST_SYSTEM_PROMPT;
+        break;
+      case "personal-assistant":
+        basePrompt = PERSONAL_ASSISTANT_SYSTEM_PROMPT;
+        break;
+      case "default":
+      default:
+        basePrompt = DEFAULT_SYSTEM_PROMPT;
+        break;
+    }
   }
   
-  switch (role) {
-    case "team-assistant":
-      return TEAM_ASSISTANT_SYSTEM_PROMPT;
-    case "data-analyst":
-      return DATA_ANALYST_SYSTEM_PROMPT;
-    case "default":
-    default:
-      return DEFAULT_SYSTEM_PROMPT;
-  }
+  // Применяем персонализацию, если доступен персональный профиль
+  return getPersonalizedSystemPrompt(basePrompt);
 }

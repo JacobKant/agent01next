@@ -40,3 +40,7 @@ next-env.d.ts
 
 # CRM test data
 crm_data.json
+
+# Personal profile (contains sensitive personal information)
+personal-profile.txt
+personal-profile.json
