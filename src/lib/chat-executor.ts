@@ -45,15 +45,26 @@ export async function executeChatWithMCP(
   }> = [];
   const intermediateMessages: ChatMessage[] = [];
 
-  // Инициализируем MCP-клиент и получаем доступные тулы
+  // Список моделей, которые не поддерживают tool use
+  const MODELS_WITHOUT_TOOL_SUPPORT = [
+    "google/gemini-2.0-flash-lite-001",
+    // Добавьте сюда другие модели, которые не поддерживают tool use
+  ];
+
+  // Инициализируем MCP-клиент и получаем доступные тулы только если модель поддерживает tool use
   const mcpClient = new McpClientManager();
   let tools: any[] = [];
+  const modelSupportsTools = model && !MODELS_WITHOUT_TOOL_SUPPORT.includes(model);
   
-  try {
-    tools = await mcpClient.connect();
-  } catch (error) {
-    console.error("[chat-executor] Ошибка при подключении к MCP:", error);
-    // Продолжаем без тулов, если MCP недоступен
+  if (modelSupportsTools) {
+    try {
+      tools = await mcpClient.connect();
+    } catch (error) {
+      console.error("[chat-executor] Ошибка при подключении к MCP:", error);
+      // Продолжаем без тулов, если MCP недоступен
+    }
+  } else {
+    console.log(`[chat-executor] Модель ${model} не поддерживает tool use, пропускаем подключение к MCP`);
   }
 
   let result: { message: ChatMessage; usage?: TokenUsage } | undefined;
@@ -62,13 +73,13 @@ export async function executeChatWithMCP(
     while (iterations < maxIterations) {
       iterations++;
 
-      // OpenRouter с поддержкой tools
+      // OpenRouter с поддержкой tools (только если модель поддерживает и есть доступные tools)
       result = await callOpenRouter(
         conversationMessages,
         model,
         temperature,
         max_tokens,
-        tools.length > 0 ? tools : undefined,
+        modelSupportsTools && tools.length > 0 ? tools : undefined,
         assistantRole,
         baseUrl,
         customSystemPrompt
@@ -204,11 +215,13 @@ export async function executeChatWithMCP(
       intermediateMessages: intermediateMessages.length > 0 ? intermediateMessages : undefined,
     };
   } finally {
-    // Закрываем MCP-клиент
-    try {
-      await mcpClient.close();
-    } catch (error) {
-      console.error("[chat-executor] Ошибка при закрытии MCP-клиента:", error);
+    // Закрываем MCP-клиент только если он был подключен
+    if (modelSupportsTools) {
+      try {
+        await mcpClient.close();
+      } catch (error) {
+        console.error("[chat-executor] Ошибка при закрытии MCP-клиента:", error);
+      }
     }
   }
 }

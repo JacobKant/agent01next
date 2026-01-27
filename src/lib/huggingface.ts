@@ -47,14 +47,11 @@ export async function callHuggingFace(
   // Получаем системный промпт для указанной роли (с поддержкой кастомного промпта)
   const systemPrompt = getSystemPrompt(assistantRole || "default", customSystemPrompt);
 
-  // Добавляем system prompt только если его еще нет
+  // Всегда подставляем актуальный system prompt под текущую роль
   const messagesWithSystem: ChatMessage[] = hasSystemMessage
-    ? messages
+    ? [{ role: "system", content: systemPrompt }, ...messages.slice(1)]
     : [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
+        { role: "system", content: systemPrompt },
         ...messages,
       ];
 

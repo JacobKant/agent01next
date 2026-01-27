@@ -2,6 +2,7 @@
 
 import { FormEvent, useState, useRef, useEffect } from "react";
 import { ChatMessage } from "@/types/chat";
+import VoiceRecorder from "@/components/VoiceRecorder";
 
 type TokenUsage = {
   prompt_tokens: number;
@@ -35,7 +36,8 @@ const initialMessages: UiMessage[] = [];
 
 const OPENROUTER_MODELS = [
   "mistralai/devstral-2512:free",
-  "google/gemma-3-27b-it:free",
+  "qwen/qwen3-next-80b-a3b-instruct:free",
+  "google/gemini-2.0-flash-lite-001",
 ];
 
 const HUGGINGFACE_MODELS = [
@@ -50,7 +52,11 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
     inputPricePer1MTokens: 0.0,
     outputPricePer1MTokens: 0.0,
   },
-  "google/gemma-3-27b-it:free": {
+  "qwen/qwen3-next-80b-a3b-instruct:free": {
+    inputPricePer1MTokens: 0.0,
+    outputPricePer1MTokens: 0.0,
+  },
+  "google/gemini-2.0-flash-lite-001": {
     inputPricePer1MTokens: 0.0,
     outputPricePer1MTokens: 0.0,
   },
@@ -411,9 +417,8 @@ export default function ChatPage() {
     setEstimatedTokens(tokens);
   }, [input, messages]);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = input.trim();
+  const submitMessage = async (messageText: string, isVoiceInput: boolean = false) => {
+    const trimmed = messageText.trim();
     if (!trimmed) {
       return;
     }
@@ -437,11 +442,28 @@ export default function ChatPage() {
     const startTime = performance.now();
 
     try {
+      // Для голосового ввода используем модель Gemini через OpenRouter, для текстового - выбранную модель
+      const modelToUse = isVoiceInput 
+        ? "google/gemini-2.0-flash-lite-001"
+        : (provider === "custom" && customModel ? customModel : model);
+      
+      // Для голосового ввода всегда используем OpenRouter
+      const providerToUse = isVoiceInput ? "openrouter" : provider;
+      
+      // Логируем для отладки
+      console.log("[submitMessage] Параметры запроса:", {
+        isVoiceInput,
+        selectedModel: model,
+        provider,
+        modelToUse,
+        providerToUse,
+      });
+      
       const requestBody: any = {
         messages: toPayload(optimisticMessages),
         temperature,
-        model: provider === "custom" && customModel ? customModel : model,
-        provider,
+        model: modelToUse,
+        provider: providerToUse,
         assistantRole,
       };
 
@@ -500,7 +522,7 @@ export default function ChatPage() {
       // Рассчитываем стоимость, если есть информация о токенах и расценки для модели
       let cost: number | undefined;
       if (data.usage) {
-        const pricing = MODEL_PRICING[model];
+        const pricing = MODEL_PRICING[modelToUse];
         if (pricing) {
           cost = calculateCost(data.usage, pricing);
         }
@@ -545,7 +567,7 @@ export default function ChatPage() {
         responseTime: responseTime,
         usage: data.usage,
         cost: cost,
-        model: model,
+        model: modelToUse,
         toolsUsed: data.tools,
         ...(data.message.reasoning_details && {
           reasoning_details: data.message.reasoning_details,
@@ -558,7 +580,7 @@ export default function ChatPage() {
           id: crypto.randomUUID(),
           role: data.summarized.message.role,
           content: `[История чата суммирована] ${data.summarized.message.content}`,
-          model: model,
+          model: modelToUse,
         };
 
         // Заменяем все сообщения кроме последнего (текущий запрос пользователя) на суммаризированное,
@@ -594,6 +616,11 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await submitMessage(input, false); // false = это текстовый ввод, не голосовой
   };
 
   // Форматирование даты для отображения
@@ -993,9 +1020,24 @@ export default function ChatPage() {
             />
             
           </div>
-          <button className="chat-button" type="submit" disabled={isLoading}>
-            {isLoading ? "Отправка..." : "Отправить"}
-          </button>
+          <div className="chat-form-actions">
+            <VoiceRecorder
+              onTranscript={(text) => {
+                setInput(text);
+                // Автоматически отправляем запрос после распознавания с флагом голосового ввода
+                setTimeout(() => {
+                  submitMessage(text, true); // true = это голосовой ввод
+                }, 300);
+              }}
+              onError={(error) => {
+                setError(error);
+              }}
+              disabled={isLoading}
+            />
+            <button className="chat-button" type="submit" disabled={isLoading}>
+              {isLoading ? "Отправка..." : "Отправить"}
+            </button>
+          </div>
         </form>
         {error && <p className="chat-error">{error}</p>}
 

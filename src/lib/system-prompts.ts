@@ -406,6 +406,9 @@ export function getSystemPrompt(role: AssistantRole = "default", customPrompt?: 
     }
   }
   
-  // Применяем персонализацию, если доступен персональный профиль
-  return getPersonalizedSystemPrompt(basePrompt);
+  // Персональные данные (personal-profile.txt) подключаем только в режиме «Личный»
+  if (role === "personal-assistant") {
+    return getPersonalizedSystemPrompt(basePrompt);
+  }
+  return basePrompt;
 }

@@ -153,7 +153,14 @@ body {
 
 .chat-form {
   display: flex;
+  flex-direction: column;
   gap: 0.75rem;
+}
+
+.chat-form-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 .chat-input-wrapper {

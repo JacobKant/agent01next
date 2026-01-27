@@ -105,14 +105,12 @@ export async function callOpenRouter(
   // Получаем системный промпт для указанной роли (с поддержкой кастомного промпта)
   const systemPrompt = getSystemPrompt(assistantRole || "default", customSystemPrompt);
 
-  // Добавляем system prompt только если его еще нет
+  // Всегда используем актуальный system prompt под текущую роль, чтобы при смене режима
+  // (например «Личный» → «Обычный») не уходил старый промпт с персонализацией
   const messagesWithSystem: ChatMessage[] = hasSystemMessage
-    ? cleanedMessages
+    ? [{ role: "system", content: systemPrompt }, ...cleanedMessages.slice(1)]
     : [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
+        { role: "system", content: systemPrompt },
         ...cleanedMessages,
       ];
 
@@ -120,11 +118,24 @@ export async function callOpenRouter(
     model,
     messages: messagesWithSystem,
     temperature,
+    // Явно разрешаем провайдеров с хранением данных, чтобы избежать 404
+    // "No endpoints found matching your data policy (Free model publication)"
+    // при использовании бесплатных моделей (:free)
+    ...(baseUrl ? {} : { provider: { data_collection: "allow" as const } }),
   };
 
-  // Параметр reasoning поддерживается только OpenRouter, не добавляем для кастомного API
+  // Параметр reasoning поддерживается только OpenRouter и не всеми моделями
+  // Список моделей, которые не поддерживают reasoning
+  const MODELS_WITHOUT_REASONING = [
+    "google/gemini-2.0-flash-lite-001",
+    // Добавьте сюда другие модели, которые не поддерживают reasoning
+  ];
+
   if (!baseUrl) {
-    requestBody.reasoning = { enabled: true };
+    // Включаем reasoning только если модель его поддерживает
+    if (!MODELS_WITHOUT_REASONING.includes(model)) {
+      requestBody.reasoning = { enabled: true };
+    }
   } else {
     // Для кастомного API (Ollama) отключаем streaming для получения полного ответа
     requestBody.stream = false;
