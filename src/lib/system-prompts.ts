@@ -4,7 +4,7 @@
 
 import { getPersonalizedSystemPrompt } from "./personal-profile";
 
-export type AssistantRole = "default" | "team-assistant" | "data-analyst" | "personal-assistant";
+export type AssistantRole = "default" | "team-assistant" | "data-analyst" | "personal-assistant" | "god-agent";
 
 /**
  * Промпт для обычного ассистента (поддержка пользователей)

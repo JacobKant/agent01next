@@ -29,26 +29,20 @@ type UiMessage = ChatMessage & {
   }>;
 };
 
-type Provider = "openrouter" | "huggingface" | "custom";
+type Provider = "openrouter" | "custom";
 type AssistantRole = "default" | "team-assistant" | "data-analyst" | "personal-assistant";
 
 const initialMessages: UiMessage[] = [];
 
 const OPENROUTER_MODELS = [
-  "mistralai/devstral-2512:free",
+  "arcee-ai/trinity-large-preview:free",
   "qwen/qwen3-next-80b-a3b-instruct:free",
   "google/gemini-2.0-flash-lite-001",
 ];
 
-const HUGGINGFACE_MODELS = [
-  "deepseek-ai/DeepSeek-V3.2:novita",
-  "Qwen/Qwen2.5-72B-Instruct:novita",
-  "google/gemma-2-2b-it:nebius",
-];
-
 // Конфигурация расценок для моделей (цена за 1 миллион токенов в долларах)
 const MODEL_PRICING: Record<string, ModelPricing> = {
-  "mistralai/devstral-2512:free": {
+  "arcee-ai/trinity-large-preview:free": {
     inputPricePer1MTokens: 0.0,
     outputPricePer1MTokens: 0.0,
   },
@@ -59,18 +53,6 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   "google/gemini-2.0-flash-lite-001": {
     inputPricePer1MTokens: 0.0,
     outputPricePer1MTokens: 0.0,
-  },
-  "deepseek-ai/DeepSeek-V3.2:novita": {
-    inputPricePer1MTokens: 0.27, 
-    outputPricePer1MTokens: 0.40, 
-  },
-  "Qwen/Qwen2.5-72B-Instruct:novita": {
-    inputPricePer1MTokens: 0.30, 
-    outputPricePer1MTokens: 0.32, 
-  },
-  "google/gemma-2-2b-it:nebius": {
-    inputPricePer1MTokens: 0.02, 
-    outputPricePer1MTokens: 0.06, 
   },
 };
 
@@ -123,9 +105,7 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [temperature, setTemperature] = useState(1.0);
   const [provider, setProvider] = useState<Provider>("openrouter");
-  const [model, setModel] = useState<string>(
-    provider === "openrouter" ? OPENROUTER_MODELS[0] : HUGGINGFACE_MODELS[0]
-  );
+  const [model, setModel] = useState<string>(OPENROUTER_MODELS[0]);
   const [maxTokens, setMaxTokens] = useState<string>("");
   const [estimatedTokens, setEstimatedTokens] = useState(0);
   const [chatId, setChatId] = useState<string>("default");
@@ -334,6 +314,7 @@ export default function ChatPage() {
     if (!file) return;
 
     setIsUploading(true);
+    setError(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -346,14 +327,16 @@ export default function ChatPage() {
       if (response.ok) {
         const data = await response.json();
         await loadUploadedFiles();
-        alert(`Файл ${data.fileName} успешно загружен!`);
+        // Показываем уведомление через временное сообщение
+        setError(`✅ Файл ${data.fileName} успешно загружен!`);
+        setTimeout(() => setError(null), 3000);
       } else {
         const error = await response.json();
-        alert(`Ошибка загрузки: ${error.error}`);
+        setError(`Ошибка загрузки: ${error.error}`);
       }
     } catch (error) {
       console.error("Ошибка при загрузке файла:", error);
-      alert("Ошибка при загрузке файла");
+      setError("Ошибка при загрузке файла");
     } finally {
       setIsUploading(false);
       // Сбрасываем значение input, чтобы можно было загрузить тот же файл снова
@@ -361,12 +344,10 @@ export default function ChatPage() {
     }
   };
 
-  // Загрузка списка чатов при монтировании
+  // Загрузка списка чатов и файлов при монтировании
   useEffect(() => {
     loadChats();
-    if (assistantRole === "data-analyst") {
-      loadUploadedFiles();
-    }
+    loadUploadedFiles();
   }, []);
 
   // Обновление списка чатов после сохранения сообщения
@@ -376,19 +357,6 @@ export default function ChatPage() {
     }
   }, [messages.length]);
 
-  // Обновление списка файлов при смене роли на data-analyst
-  useEffect(() => {
-    if (assistantRole === "data-analyst") {
-      loadUploadedFiles();
-    }
-  }, [assistantRole]);
-
-  // Обновляем модель при смене провайдера
-  useEffect(() => {
-    setModel(
-      provider === "openrouter" ? OPENROUTER_MODELS[0] : HUGGINGFACE_MODELS[0]
-    );
-  }, [provider]);
 
   // Автоматическое изменение высоты textarea
   useEffect(() => {
@@ -417,7 +385,7 @@ export default function ChatPage() {
     setEstimatedTokens(tokens);
   }, [input, messages]);
 
-  const submitMessage = async (messageText: string, isVoiceInput: boolean = false) => {
+  const submitMessage = async (messageText: string) => {
     const trimmed = messageText.trim();
     if (!trimmed) {
       return;
@@ -431,10 +399,10 @@ export default function ChatPage() {
 
     const optimisticMessages = [...messages, userMessage];
     setMessages(optimisticMessages);
-    
+
     // Сохраняем сообщение пользователя в БД
     await saveMessageToDb(userMessage);
-    
+
     setInput("");
     setIsLoading(true);
     setError(null);
@@ -442,17 +410,12 @@ export default function ChatPage() {
     const startTime = performance.now();
 
     try {
-      // Для голосового ввода используем модель Gemini через OpenRouter, для текстового - выбранную модель
-      const modelToUse = isVoiceInput 
-        ? "google/gemini-2.0-flash-lite-001"
-        : (provider === "custom" && customModel ? customModel : model);
-      
-      // Для голосового ввода всегда используем OpenRouter
-      const providerToUse = isVoiceInput ? "openrouter" : provider;
-      
+      // Используем выбранную пользователем модель и провайдер
+      const modelToUse = provider === "custom" && customModel ? customModel : model;
+      const providerToUse = provider;
+
       // Логируем для отладки
       console.log("[submitMessage] Параметры запроса:", {
-        isVoiceInput,
         selectedModel: model,
         provider,
         modelToUse,
@@ -477,15 +440,11 @@ export default function ChatPage() {
         requestBody.baseUrl = customBaseUrl.trim();
       }
 
-      // Добавляем параметр max_tokens/max_new_tokens только если поле заполнено
+      // Добавляем параметр max_tokens только если поле заполнено
       if (maxTokens.trim()) {
         const maxTokensValue = parseInt(maxTokens.trim(), 10);
         if (!isNaN(maxTokensValue) && maxTokensValue > 0) {
-          if (provider === "openrouter") {
-            requestBody.max_tokens = maxTokensValue;
-          } else {
-            requestBody.max_new_tokens = maxTokensValue;
-          }
+          requestBody.max_tokens = maxTokensValue;
         }
       }
 
@@ -620,7 +579,7 @@ export default function ChatPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await submitMessage(input, false); // false = это текстовый ввод, не голосовой
+    await submitMessage(input);
   };
 
   // Форматирование даты для отображения
@@ -706,14 +665,6 @@ export default function ChatPage() {
               disabled={isLoading}
             >
               OpenRouter
-            </button>
-            <button
-              type="button"
-              className={`provider-button ${provider === "huggingface" ? "active" : ""}`}
-              onClick={() => setProvider("huggingface")}
-              disabled={isLoading}
-            >
-              Hugging Face
             </button>
             <button
               type="button"
@@ -840,35 +791,6 @@ export default function ChatPage() {
           </div>
         )}
 
-        {assistantRole === "data-analyst" && (
-          <div className="chat-model-selector">
-            <label htmlFor="file-upload" className="model-label">
-              Загрузка данных (CSV, JSON, LOG, TXT):
-            </label>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <input
-                id="file-upload"
-                type="file"
-                accept=".csv,.json,.log,.txt"
-                onChange={handleFileUpload}
-                disabled={isUploading}
-                style={{ flex: 1 }}
-              />
-              {isUploading && <span>Загрузка...</span>}
-            </div>
-            {uploadedFiles.length > 0 && (
-              <div style={{ marginTop: "10px", fontSize: "0.9em", color: "#666" }}>
-                <strong>Загружено файлов: {uploadedFiles.length}</strong>
-                <ul style={{ marginTop: "5px", paddingLeft: "20px" }}>
-                  {uploadedFiles.map((file, index) => (
-                    <li key={index}>{file.fileName}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
         {provider !== "custom" && (
           <div className="chat-model-selector">
             <label htmlFor="model-select" className="model-label">
@@ -881,13 +803,11 @@ export default function ChatPage() {
               onChange={(e) => setModel(e.target.value)}
               disabled={isLoading}
             >
-              {(provider === "openrouter" ? OPENROUTER_MODELS : HUGGINGFACE_MODELS).map(
-                (modelOption) => (
-                  <option key={modelOption} value={modelOption}>
-                    {modelOption}
-                  </option>
-                )
-              )}
+              {OPENROUTER_MODELS.map((modelOption) => (
+                <option key={modelOption} value={modelOption}>
+                  {modelOption}
+                </option>
+              ))}
             </select>
           </div>
         )}
@@ -1018,15 +938,70 @@ export default function ChatPage() {
               disabled={isLoading}
               rows={1}
             />
-            
+
           </div>
+
+          {/* Список загруженных файлов */}
+          {uploadedFiles.length > 0 && (
+            <div style={{
+              marginBottom: "10px",
+              padding: "10px",
+              background: "#f5f5f5",
+              borderRadius: "6px",
+              fontSize: "0.9em"
+            }}>
+              <strong>Загруженные файлы ({uploadedFiles.length}):</strong>
+              <div style={{
+                marginTop: "5px",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "5px"
+              }}>
+                {uploadedFiles.map((file, index) => (
+                  <span
+                    key={index}
+                    style={{
+                      padding: "2px 8px",
+                      background: "#e0e0e0",
+                      borderRadius: "4px",
+                      fontSize: "0.85em"
+                    }}
+                  >
+                    {file.fileName}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="chat-form-actions">
+            {/* Скрытый input для загрузки файлов */}
+            <input
+              type="file"
+              id="file-upload-input"
+              accept=".csv,.json,.log,.txt"
+              onChange={handleFileUpload}
+              disabled={isUploading}
+              style={{ display: "none" }}
+            />
+
+            {/* Кнопка загрузки файлов */}
+            <button
+              type="button"
+              className="chat-button"
+              onClick={() => document.getElementById("file-upload-input")?.click()}
+              disabled={isLoading || isUploading}
+              title="Загрузить файл (CSV, JSON, LOG, TXT)"
+            >
+              {isUploading ? "📤..." : "📎"}
+            </button>
+
             <VoiceRecorder
               onTranscript={(text) => {
                 setInput(text);
-                // Автоматически отправляем запрос после распознавания с флагом голосового ввода
+                // Автоматически отправляем запрос после распознавания
                 setTimeout(() => {
-                  submitMessage(text, true); // true = это голосовой ввод
+                  submitMessage(text);
                 }, 300);
               }}
               onError={(error) => {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TokenUsage } from "@/lib/openrouter";
-import { callHuggingFace } from "@/lib/huggingface";
 import { ChatMessage } from "@/types/chat";
 import { executeChatWithMCP } from "@/lib/chat-executor";
 
@@ -10,7 +9,7 @@ type ChatRequestBody = {
   temperature?: number;
   max_tokens?: number;
   max_new_tokens?: number;
-  provider?: "openrouter" | "huggingface" | "custom";
+  provider?: "openrouter" | "custom";
   assistantRole?: "default" | "team-assistant" | "data-analyst" | "personal-assistant";
   baseUrl?: string;
   customSystemPrompt?: string;
@@ -37,13 +36,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Для HuggingFace модель обязательна
-  if (provider === "huggingface" && !model) {
-    return NextResponse.json(
-      { error: "Поле model обязательно для провайдера HuggingFace" },
-      { status: 400 }
-    );
-  }
 
   try {
     let messagesToSend = messages;
@@ -58,18 +50,7 @@ export async function POST(request: NextRequest) {
     }> = [];
     let intermediateMessages: ChatMessage[] = [];
 
-    if (provider === "huggingface") {
-      // HuggingFace пока не поддерживает tools в текущей реализации
-      result = await callHuggingFace(
-        messagesToSend,
-        model!,
-        temperature ?? 1.0,
-        max_new_tokens,
-        baseUrl,
-        assistantRole,
-        body.customSystemPrompt
-      );
-    } else if (provider === "custom") {
+    if (provider === "custom") {
       // Кастомный API с поддержкой MCP инструментов через общую функцию
       if (!baseUrl || !model) {
         return NextResponse.json(
@@ -160,7 +141,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    const providerName = provider === "huggingface" ? "HuggingFace" : "OpenRouter";
+    const providerName = provider === "custom" ? "Custom API" : "OpenRouter";
     const message =
       error instanceof Error ? error.message : `Неизвестная ошибка ${providerName}`;
     return NextResponse.json({ error: message }, { status: 500 });

@@ -6,7 +6,7 @@
 
 Проект представляет собой полнофункциональную платформу для взаимодействия с AI моделями, которая включает:
 
-- **Мультипровайдерность**: Поддержка OpenRouter и HuggingFace API
+- **Мультипровайдерность**: Поддержка OpenRouter API и кастомных провайдеров
 - **Расширяемость**: Интеграция через MCP серверы для добавления новых инструментов
 - **RAG**: Семантический поиск по индексированным документам
 - **Планировщик задач**: Автоматическое выполнение задач по расписанию
@@ -27,7 +27,6 @@ agent01next/
 │   │   ├── mcp-client.ts     # Клиент для MCP серверов
 │   │   ├── chat-executor.ts  # Исполнитель чата с поддержкой инструментов
 │   │   ├── openrouter.ts     # Интеграция с OpenRouter API
-│   │   ├── huggingface.ts    # Интеграция с HuggingFace API
 │   │   ├── embeddings.ts     # Генерация эмбеддингов
 │   │   ├── db.ts             # Работа с SQLite БД
 │   │   ├── scheduler.ts      # Планировщик задач (cron)
@@ -78,7 +77,6 @@ cp env.local.example .env.local
 
 ```env
 OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 ```
 
@@ -155,7 +153,6 @@ SQLite база данных для хранения:
 | Ключ | Назначение | Значение по умолчанию |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | **Обязательно** - ключ доступа к OpenRouter | — |
-| `HF_TOKEN` | Токен для HuggingFace API | — |
 | `TELEGRAM_BOT_TOKEN` | Токен Telegram бота для уведомлений | — |
 | `OPENROUTER_MODEL` | Идентификатор модели OpenRouter | `x-ai/grok-4.1-fast:free` |
 | `OPENROUTER_BASE_URL` | Базовый URL API OpenRouter | `https://openrouter.ai/api/v1/chat/completions` |
@@ -181,7 +178,6 @@ npm run mcp:server  # Запуск MCP сервера (для тестирова
 - **Model Context Protocol (MCP)** - Протокол расширения функциональности
 - **node-cron** - Планировщик задач
 - **OpenRouter API** - Провайдер LLM моделей
-- **HuggingFace API** - Альтернативный провайдер LLM
 
 ## 🎨 Особенности
 

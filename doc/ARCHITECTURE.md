@@ -22,7 +22,7 @@
 
 #### Бизнес-логика (src/lib/)
 - Исполнители чата (chat-executor)
-- Интеграции с внешними сервисами (openrouter, huggingface)
+- Интеграции с внешними сервисами (openrouter)
 - Работа с базой данных (db)
 - Планировщик задач (scheduler)
 
@@ -95,7 +95,7 @@
 - Создание задач планировщика через регистрацию
 
 ### 2. Strategy Pattern
-- Разные провайдеры LLM (OpenRouter, HuggingFace)
+- Разные провайдеры LLM (OpenRouter, кастомные API)
 - Разные типы MCP серверов (локальные, npm пакеты)
 
 ### 3. Observer Pattern

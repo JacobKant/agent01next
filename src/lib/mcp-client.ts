@@ -31,34 +31,34 @@ export class McpClientManager {
 
   // Конфигурация MCP серверов
   private servers: McpServerConfig[] = [
-    // {
-    //   name: "cbr-rates-server",
-    //   serverPath: join(process.cwd(), "src", "mcp", "server.ts"),
-    // },
-    // {
-    //   name: "web-fetch-server",
-    //   serverPath: join(process.cwd(), "src", "mcp", "web-server.ts"),
-    // },
-    // {
-    //   name: "file-server",
-    //   serverPath: join(process.cwd(), "src", "mcp", "file-server.ts"),
-    // },
-    // {
-    //   name: "rag-search-server",
-    //   serverPath: join(process.cwd(), "src", "mcp", "rag-server.ts"),
-    // },
-    // {
-    //   name: "git-server",
-    //   serverPath: join(process.cwd(), "src", "mcp", "git-server.ts"),
-    // },
-    // {
-    //   name: "crm-server",
-    //   serverPath: join(process.cwd(), "src", "mcp", "crm-server.ts"),
-    // },
-    // {
-    //   name: "github-issues-server",
-    //   serverPath: join(process.cwd(), "src", "mcp", "github-issues-server.ts"),
-    // },
+    {
+      name: "cbr-rates-server",
+      serverPath: join(process.cwd(), "src", "mcp", "server.ts"),
+    },
+    {
+      name: "web-fetch-server",
+      serverPath: join(process.cwd(), "src", "mcp", "web-server.ts"),
+    },
+    {
+      name: "file-server",
+      serverPath: join(process.cwd(), "src", "mcp", "file-server.ts"),
+    },
+    {
+      name: "rag-search-server",
+      serverPath: join(process.cwd(), "src", "mcp", "rag-server.ts"),
+    },
+    {
+      name: "git-server",
+      serverPath: join(process.cwd(), "src", "mcp", "git-server.ts"),
+    },
+    {
+      name: "crm-server",
+      serverPath: join(process.cwd(), "src", "mcp", "crm-server.ts"),
+    },
+    {
+      name: "github-issues-server",
+      serverPath: join(process.cwd(), "src", "mcp", "github-issues-server.ts"),
+    },
     {
       name: "data-analyst-server",
       serverPath: join(process.cwd(), "src", "mcp", "data-analyst-server.ts"),

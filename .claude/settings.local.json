@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del /Q \"F:\\\\PetProjects\\\\ai_couse\\\\agent01next\\\\data\\\\analyst\\\\example_errors.log\" \"F:\\\\PetProjects\\\\ai_couse\\\\agent01next\\\\data\\\\analyst\\\\example_sales.csv\")"
+    ]
+  }
+}

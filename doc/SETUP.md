@@ -41,9 +41,6 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
 OPENROUTER_HTTP_REFERER=http://localhost:3000
 OPENROUTER_APP_NAME=Agent01 Chat
 
-# HuggingFace (опционально)
-HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
 # Telegram Bot (опционально, для уведомлений)
 TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 ```
@@ -57,14 +54,6 @@ TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 3. Создайте новый API ключ
 4. Скопируйте ключ в формат `sk-or-...`
 5. Добавьте в `.env.local` как `OPENROUTER_API_KEY`
-
-### HuggingFace Token
-
-1. Зарегистрируйтесь на [HuggingFace.co](https://huggingface.co/)
-2. Перейдите в Settings → Access Tokens
-3. Создайте новый токен с правами чтения
-4. Скопируйте токен в формат `hf_...`
-5. Добавьте в `.env.local` как `HF_TOKEN`
 
 ### Telegram Bot Token
 
@@ -197,7 +186,6 @@ sqlite3 data/chats.db "SELECT COUNT(*) FROM messages;"
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-export HF_TOKEN=hf_...
 npm run build
 npm run start
 ```
